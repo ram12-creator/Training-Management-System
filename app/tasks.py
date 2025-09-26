@@ -1,0 +1,572 @@
+# from celery_worker import celery
+# from flask import current_app
+# import mysql.connector
+# import os
+# import subprocess
+
+# def _evaluate_python(submission_file_path, test_case_file_path):
+#         """
+#         Evaluates a Python submission.
+#         WARNING: THIS IS A PROTOTYPE. In production, this MUST be run inside
+#         a secure, isolated Docker container to prevent malicious code execution.
+#         """
+#         try:
+#             command = ['python', test_case_file_path, submission_file_path]
+#             result = subprocess.run(command, capture_output=True, text=True, timeout=30)
+            
+#             output = f"STDOUT:\n{result.stdout}\n\nSTDERR:\n{result.stderr}"
+            
+#             # Simple success check: Assumes test script exits 0 and prints "OK" on success
+#             if result.returncode == 0 and "OK" in result.stdout:
+#                 grade = 100
+#                 feedback = "All test cases passed successfully. Excellent work!"
+#             else:
+#                 grade = 25
+#                 feedback = "Some test cases failed. Please review the output for errors."
+            
+#             return {'grade': grade, 'feedback': feedback, 'output': output}
+#         except subprocess.TimeoutExpired:
+#             return {'grade': 0, 'feedback': "Evaluation failed: Code took too long to execute.", 'output': 'Timeout Error'}
+#         except Exception as e:
+#             return {'grade': 0, 'feedback': "An error occurred during evaluation.", 'output': str(e)}
+
+# @celery.task(name='app.tasks.evaluate_submission')
+# def evaluate_submission(submission_id):
+#         db_config = current_app.config['DB_CONFIG']
+#         conn = mysql.connector.connect(**db_config)
+#         cursor = conn.cursor(dictionary=True)
+
+#         try:
+#             cursor.execute("""
+#                 SELECT 
+#                     asub.file_path as submission_file,
+#                     a.evaluation_type,
+#                     a.test_case_file_path as test_file
+#                 FROM assignment_submissions asub
+#                 JOIN assignments a ON asub.assignment_id = a.assignment_id
+#                 WHERE asub.submission_id = %s
+#             """, (submission_id,))
+#             task_data = cursor.fetchone()
+
+#             if not task_data or not task_data['evaluation_type'] or task_data['evaluation_type'] == 'none':
+#                 return "Not an auto-graded assignment."
+
+#             cursor.execute("UPDATE assignment_submissions SET evaluation_status = 'processing' WHERE submission_id = %s", (submission_id,))
+#             conn.commit()
+
+#             base_path = current_app.root_path
+#             submission_path = os.path.join(base_path, 'static', task_data['submission_file'])
+#             test_case_path = os.path.join(base_path, 'static', task_data['test_file'])
+            
+#             result = {}
+#             if task_data['evaluation_type'] == 'python':
+#                 result = _evaluate_python(submission_path, test_case_path)
+#             # Add other evaluators here: elif task_data['evaluation_type'] == 'sql': ...
+
+#             cursor.execute("""
+#                 UPDATE assignment_submissions 
+#                 SET auto_grade = %s, auto_feedback = %s, evaluation_output = %s, evaluation_status = 'completed'
+#                 WHERE submission_id = %s
+#             """, (result.get('grade'), result.get('feedback'), result.get('output'), submission_id))
+#             conn.commit()
+
+#         except Exception as e:
+#             cursor.execute("UPDATE assignment_submissions SET evaluation_status = 'error', evaluation_output = %s WHERE submission_id = %s", (str(e), submission_id))
+#             conn.commit()
+#         finally:
+#             cursor.close()
+#             conn.close()
+# __________________________________________-
+
+# from app import celery # Import the celery instance from our app package
+# from flask import current_app
+# import mysql.connector
+# import os
+# import subprocess
+
+# def _evaluate_python(submission_file_path, test_case_file_path):
+#     """
+#     Evaluates a Python submission.
+#     WARNING: THIS IS A PROTOTYPE. In production, this MUST be run inside
+#     a secure, isolated Docker container to prevent malicious code execution.
+#     """
+#     try:
+#         command = ['python', test_case_file_path, submission_file_path]
+#         result = subprocess.run(command, capture_output=True, text=True, timeout=30)
+        
+#         output = f"STDOUT:\n{result.stdout}\n\nSTDERR:\n{result.stderr}"
+        
+#         if result.returncode == 0 and "OK" in result.stdout:
+#             grade = 100
+#             feedback = "All test cases passed successfully. Excellent work!"
+#         else:
+#             grade = 25
+#             feedback = "Some test cases failed. Please review the output for errors."
+        
+#         return {'grade': grade, 'feedback': feedback, 'output': output}
+#     except subprocess.TimeoutExpired:
+#         return {'grade': 0, 'feedback': "Evaluation failed: Code took too long to execute.", 'output': 'Timeout Error'}
+#     except Exception as e:
+#         return {'grade': 0, 'feedback': "An error occurred during evaluation.", 'output': str(e)}
+
+# @celery.task(name='app.tasks.evaluate_submission')
+# def evaluate_submission(submission_id):
+#     # This task now runs within the Flask app context, so we can use current_app
+#     db_config = current_app.config['DB_CONFIG']
+#     conn = mysql.connector.connect(**db_config)
+#     cursor = conn.cursor(dictionary=True)
+
+#     try:
+#         cursor.execute("""
+#             SELECT 
+#                 asub.file_path as submission_file,
+#                 a.evaluation_type,
+#                 a.test_case_file_path as test_file
+#             FROM assignment_submissions asub
+#             JOIN assignments a ON asub.assignment_id = a.assignment_id
+#             WHERE asub.submission_id = %s
+#         """, (submission_id,))
+#         task_data = cursor.fetchone()
+
+#         if not task_data or not task_data['evaluation_type'] or task_data['evaluation_type'] == 'none':
+#             return "Not an auto-graded assignment."
+
+#         cursor.execute("UPDATE assignment_submissions SET evaluation_status = 'processing' WHERE submission_id = %s", (submission_id,))
+#         conn.commit()
+
+#         base_path = current_app.root_path
+#         submission_path = os.path.join(base_path, 'static', task_data['submission_file'])
+#         test_case_path = os.path.join(base_path, 'static', task_data['test_file'])
+        
+#         result = {}
+#         if task_data['evaluation_type'] == 'python':
+#             result = _evaluate_python(submission_path, test_case_path)
+#         # Add other evaluators here: elif task_data['evaluation_type'] == 'sql': ...
+
+#         cursor.execute("""
+#             UPDATE assignment_submissions 
+#             SET auto_grade = %s, auto_feedback = %s, evaluation_output = %s, evaluation_status = 'completed'
+#             WHERE submission_id = %s
+#         """, (result.get('grade'), result.get('feedback'), result.get('output'), submission_id))
+#         conn.commit()
+
+#     except Exception as e:
+#         cursor.execute("UPDATE assignment_submissions SET evaluation_status = 'error', evaluation_output = %s WHERE submission_id = %s", (str(e), submission_id))
+#         conn.commit()
+#     finally:
+#         cursor.close()
+#         conn.close()
+
+
+# ______________________________________________________________--
+
+# from celery_worker import celery
+# from flask import current_app
+# import mysql.connector
+# import os
+# import subprocess
+# import openpyxl   # For Excel
+# import pandas as pd # For SQL data comparison
+# from sqlalchemy import create_engine, text # For running SQL queries
+# from bs4 import BeautifulSoup # For HTML parsing
+# import cssutils # For CSS parsing
+# import zipfile # For handling web submissions
+
+# # ===============================================================
+# # EVALUATION ENGINES
+# # ===============================================================
+
+# def _evaluate_python(submission_file_path, test_case_file_path):
+#     """Evaluates a Python submission in a sandboxed environment (prototype)."""
+#     try:
+#         command = ['python', test_case_file_path, submission_file_path]
+#         result = subprocess.run(command, capture_output=True, text=True, timeout=30)
+#         output = f"STDOUT:\n{result.stdout}\n\nSTDERR:\n{result.stderr}"
+#         if result.returncode == 0 and "OK" in result.stdout:
+#             grade = 100
+#             feedback = "All test cases passed successfully. Excellent work!"
+#         else:
+#             grade = 25
+#             feedback = "Some test cases failed. Please review the output for errors."
+#         return {'grade': grade, 'feedback': feedback, 'output': output}
+#     except subprocess.TimeoutExpired:
+#         return {'grade': 0, 'feedback': "Evaluation failed: Code took too long to execute.", 'output': 'Timeout Error'}
+#     except Exception as e:
+#         return {'grade': 0, 'feedback': "An error occurred during evaluation.", 'output': str(e)}
+
+# def _evaluate_sql(submission_file_path, test_case_file_path):
+#     """Compares the result set of a student's SQL query against a solution query."""
+#     db_config = current_app.config['DB_CONFIG']
+#     # IMPORTANT: In production, use a dedicated, read-only test database user.
+#     # Never run student queries against your main application database.
+#     connection_string = f"mysql+mysqlconnector://{db_config['user']}:{db_config['password']}@{db_config['host']}/{db_config['database']}"
+#     engine = create_engine(connection_string)
+
+#     try:
+#         with open(submission_file_path, 'r') as f:
+#             student_query = f.read()
+#         with open(test_case_file_path, 'r') as f:
+#             solution_query = f.read()
+            
+#         with engine.connect() as conn:
+#             student_df = pd.read_sql(text(student_query), conn)
+#             solution_df = pd.read_sql(text(solution_query), conn)
+
+#         # Grade based on comparison
+#         if student_df.equals(solution_df):
+#             grade = 100
+#             feedback = "Correct! The query produced the exact expected result."
+#         elif list(student_df.columns) == list(solution_df.columns) and len(student_df) == len(solution_df):
+#             grade = 75
+#             feedback = "The structure and number of rows are correct, but some values are different. Check your WHERE clauses or calculations."
+#         elif list(student_df.columns) == list(solution_df.columns):
+#             grade = 50
+#             feedback = "The columns are correct, but the number of rows is different. Check your JOINs or WHERE clauses."
+#         else:
+#             grade = 10
+#             feedback = "The query ran, but the columns in the result are incorrect."
+
+#         output = f"--- STUDENT RESULT ---\n{student_df.to_string()}\n\n--- EXPECTED RESULT ---\n{solution_df.to_string()}"
+#         return {'grade': grade, 'feedback': feedback, 'output': output}
+
+#     except Exception as e:
+#         return {'grade': 0, 'feedback': "Your SQL query failed to execute.", 'output': str(e)}
+
+# def _evaluate_excel(submission_file_path, test_case_file_path):
+#     """Compares values and formulas in a student's Excel file against a solution."""
+#     try:
+#         student_wb = openpyxl.load_workbook(submission_file_path)
+#         solution_wb = openpyxl.load_workbook(test_case_file_path)
+        
+#         # Assume we are working with the active sheet
+#         student_sheet = student_wb.active
+#         solution_sheet = solution_wb.active
+
+#         # Example Test Cases: Compare cell B5's value and cell C5's formula
+#         tests = [
+#             {'cell': 'B5', 'type': 'value', 'weight': 50},
+#             {'cell': 'C5', 'type': 'formula', 'weight': 50}
+#         ]
+        
+#         grade = 0
+#         feedback_lines = []
+        
+#         for test in tests:
+#             cell = test['cell']
+#             student_val = student_sheet[cell].value
+#             solution_val = solution_sheet[cell].value
+            
+#             is_correct = False
+#             if test['type'] == 'value':
+#                 is_correct = (student_val == solution_val)
+#                 feedback_lines.append(f"Cell {cell} Value Check: {'PASS' if is_correct else 'FAIL'}. Expected '{solution_val}', got '{student_val}'.")
+#             elif test['type'] == 'formula':
+#                 # Check if it starts with '=', indicating a formula
+#                 is_correct = (str(student_val).startswith('=') and str(student_val) == str(solution_val))
+#                 feedback_lines.append(f"Cell {cell} Formula Check: {'PASS' if is_correct else 'FAIL'}. Expected formula '{solution_val}'.")
+            
+#             if is_correct:
+#                 grade += test['weight']
+        
+#         feedback = "\n".join(feedback_lines)
+#         output = f"Final calculated grade: {grade}%\n" + feedback
+#         return {'grade': grade, 'feedback': feedback, 'output': output}
+        
+#     except Exception as e:
+#         return {'grade': 0, 'feedback': "Could not process the Excel file. Ensure it is a valid .xlsx file.", 'output': str(e)}
+
+# def _evaluate_web(submission_file_path, test_case_file_path):
+#     """Checks for specific elements and styles in HTML/CSS files."""
+#     try:
+#         # Unzip student's submission
+#         extract_dir = os.path.join(os.path.dirname(submission_file_path), 'unzipped_web')
+#         with zipfile.ZipFile(submission_file_path, 'r') as zip_ref:
+#             zip_ref.extractall(extract_dir)
+
+#         # Find HTML and CSS files
+#         html_file = next((os.path.join(extract_dir, f) for f in os.listdir(extract_dir) if f.endswith('.html')), None)
+#         css_file = next((os.path.join(extract_dir, f) for f in os.listdir(extract_dir) if f.endswith('.css')), None)
+
+#         if not html_file:
+#             return {'grade': 0, 'feedback': "No HTML file found in the submitted .zip archive.", 'output': ''}
+
+#         with open(html_file, 'r', encoding='utf-8') as f:
+#             soup = BeautifulSoup(f, 'html.parser')
+
+#         grade = 0
+#         feedback_lines = []
+
+#         # HTML Test Cases
+#         if soup.title and soup.title.string:
+#             grade += 20
+#             feedback_lines.append("PASS: Page has a valid <title> tag.")
+#         else:
+#             feedback_lines.append("FAIL: Page is missing a <title> tag.")
+
+#         if soup.find('h1'):
+#             grade += 20
+#             feedback_lines.append("PASS: An <h1> heading was found.")
+#         else:
+#             feedback_lines.append("FAIL: No <h1> heading was found.")
+            
+#         if len(soup.find_all('img')) >= 2:
+#             grade += 20
+#             feedback_lines.append("PASS: Found 2 or more <img> tags.")
+#         else:
+#             feedback_lines.append("FAIL: Less than 2 <img> tags were found.")
+
+#         # CSS Test Cases
+#         if css_file:
+#             with open(css_file, 'r', encoding='utf-8') as f:
+#                 sheet = cssutils.parseString(f.read())
+            
+#             h1_color_found = False
+#             for rule in sheet:
+#                 if rule.type == rule.STYLE_RULE and 'h1' in rule.selectorText:
+#                     if 'color' in rule.style:
+#                         grade += 40
+#                         feedback_lines.append(f"PASS: Found a CSS rule that sets a color for h1 tags.")
+#                         h1_color_found = True
+#                         break
+#             if not h1_color_found:
+#                 feedback_lines.append("FAIL: No CSS rule found that sets a color for h1 tags.")
+#         else:
+#             feedback_lines.append("INFO: No .css file was found in the submission.")
+
+#         feedback = "\n".join(feedback_lines)
+#         return {'grade': grade, 'feedback': feedback, 'output': feedback}
+
+#     except Exception as e:
+#         return {'grade': 0, 'feedback': "An error occurred while evaluating the web files.", 'output': str(e)}
+
+# # ===============================================================
+# # MAIN CELERY TASK
+# # ===============================================================
+# @celery.task(name='app.tasks.evaluate_submission')
+# def evaluate_submission(submission_id):
+#     db_config = current_app.config['DB_CONFIG']
+#     conn = mysql.connector.connect(**db_config)
+#     cursor = conn.cursor(dictionary=True)
+
+#     try:
+#         cursor.execute("""
+#             SELECT 
+#                 asub.file_path as submission_file,
+#                 a.evaluation_type,
+#                 a.test_case_file_path as test_file
+#             FROM assignment_submissions asub
+#             JOIN assignments a ON asub.assignment_id = a.assignment_id
+#             WHERE asub.submission_id = %s
+#         """, (submission_id,))
+#         task_data = cursor.fetchone()
+
+#         if not task_data or not task_data['evaluation_type'] or task_data['evaluation_type'] == 'none':
+#             return "Not an auto-graded assignment."
+        
+#         if not task_data['test_file'] and task_data['evaluation_type'] not in ['web']:
+#             raise ValueError("Test case file is missing for this evaluation type.")
+
+#         cursor.execute("UPDATE assignment_submissions SET evaluation_status = 'processing' WHERE submission_id = %s", (submission_id,))
+#         conn.commit()
+
+#         base_path = current_app.root_path
+#         submission_path = os.path.join(base_path, 'static', task_data['submission_file'])
+#         test_case_path = os.path.join(base_path, 'static', task_data['test_file']) if task_data['test_file'] else None
+        
+#         result = {}
+#         evaluation_type = task_data['evaluation_type']
+
+#         if evaluation_type == 'python':
+#             result = _evaluate_python(submission_path, test_case_path)
+#         elif evaluation_type == 'sql':
+#             result = _evaluate_sql(submission_path, test_case_path)
+#         elif evaluation_type == 'excel':
+#             result = _evaluate_excel(submission_path, test_case_path)
+#         elif evaluation_type == 'web':
+#             result = _evaluate_web(submission_path, test_case_path)
+#         else:
+#             raise TypeError("Unsupported evaluation type.")
+
+#         cursor.execute("""
+#             UPDATE assignment_submissions 
+#             SET auto_grade = %s, auto_feedback = %s, evaluation_output = %s, evaluation_status = 'completed'
+#             WHERE submission_id = %s
+#         """, (result.get('grade'), result.get('feedback'), result.get('output'), submission_id))
+#         conn.commit()
+
+#     except Exception as e:
+#         cursor.execute("UPDATE assignment_submissions SET evaluation_status = 'error', evaluation_output = %s WHERE submission_id = %s", (str(e), submission_id))
+#         conn.commit()
+#     finally:
+#         cursor.close()
+#         conn.close()
+
+
+# _________________________________________________________--
+
+from app.extensions import celery
+from flask import current_app
+import mysql.connector
+import os
+import subprocess
+import openpyxl
+import pandas as pd
+from sqlalchemy import create_engine, text
+from bs4 import BeautifulSoup
+import cssutils
+import zipfile
+
+# ===============================================================
+# EVALUATION ENGINES
+# ===============================================================
+
+def _evaluate_python(submission_file_path, test_case_file_path):
+    """Evaluates a Python submission."""
+    try:
+        command = ['python', test_case_file_path, submission_file_path]
+        result = subprocess.run(command, capture_output=True, text=True, timeout=30)
+        output = f"STDOUT:\n{result.stdout}\n\nSTDERR:\n{result.stderr}"
+        if result.returncode == 0 and "OK" in result.stdout:
+            grade = 100
+            feedback = "All test cases passed successfully. Excellent work!"
+        else:
+            grade = 25
+            feedback = "Some test cases failed. Please review the output for errors."
+        return {'grade': grade, 'feedback': feedback, 'output': output}
+    except subprocess.TimeoutExpired:
+        return {'grade': 0, 'feedback': "Evaluation failed: Code took too long to execute.", 'output': 'Timeout Error'}
+    except Exception as e:
+        return {'grade': 0, 'feedback': "An error occurred during evaluation.", 'output': str(e)}
+
+def _evaluate_sql(submission_file_path, test_case_file_path):
+    """Compares the result set of a student's SQL query against a solution query."""
+    db_config = current_app.config['DB_CONFIG']
+    connection_string = f"mysql+mysqlconnector://{db_config['user']}:{db_config['password']}@{db_config['host']}/{db_config['database']}"
+    engine = create_engine(connection_string)
+    try:
+        with open(submission_file_path, 'r') as f: student_query = f.read()
+        with open(test_case_file_path, 'r') as f: solution_query = f.read()
+        with engine.connect() as conn:
+            student_df = pd.read_sql(text(student_query), conn)
+            solution_df = pd.read_sql(text(solution_query), conn)
+        if student_df.equals(solution_df):
+            grade, feedback = 100, "Correct! The query produced the exact expected result."
+        elif list(student_df.columns) == list(solution_df.columns):
+            grade, feedback = 50, "The columns are correct, but the data is different. Check your WHERE clauses or JOINs."
+        else:
+            grade, feedback = 10, "The query ran, but the columns in the result are incorrect."
+        output = f"--- STUDENT RESULT ---\n{student_df.to_string()}\n\n--- EXPECTED RESULT ---\n{solution_df.to_string()}"
+        return {'grade': grade, 'feedback': feedback, 'output': output}
+    except Exception as e:
+        return {'grade': 0, 'feedback': "Your SQL query failed to execute.", 'output': str(e)}
+
+def _evaluate_excel(submission_file_path, test_case_file_path):
+    """Compares values in a student's Excel file against a solution."""
+    try:
+        student_wb = openpyxl.load_workbook(submission_file_path)
+        solution_wb = openpyxl.load_workbook(test_case_file_path)
+        student_sheet = student_wb.active
+        solution_sheet = solution_wb.active
+        tests = [{'cell': 'B5', 'type': 'value', 'weight': 100}] # Simple example
+        grade = 0
+        feedback_lines = []
+        for test in tests:
+            cell, student_val, solution_val = test['cell'], student_sheet[cell].value, solution_sheet[cell].value
+            is_correct = (student_val == solution_val)
+            feedback_lines.append(f"Cell {cell} Value Check: {'PASS' if is_correct else 'FAIL'}. Expected '{solution_val}', got '{student_val}'.")
+            if is_correct: grade += test['weight']
+        feedback = "\n".join(feedback_lines)
+        return {'grade': grade, 'feedback': feedback, 'output': feedback}
+    except Exception as e:
+        return {'grade': 0, 'feedback': "Could not process the Excel file.", 'output': str(e)}
+
+def _evaluate_web(submission_file_path, test_case_file_path):
+    """Checks for specific elements in HTML/CSS files from a ZIP archive."""
+    try:
+        extract_dir = os.path.join(os.path.dirname(submission_file_path), 'unzipped_web')
+        with zipfile.ZipFile(submission_file_path, 'r') as zip_ref:
+            zip_ref.extractall(extract_dir)
+        html_file = next((os.path.join(extract_dir, f) for f in os.listdir(extract_dir) if f.endswith('.html')), None)
+        if not html_file: return {'grade': 0, 'feedback': "No HTML file found in the .zip archive.", 'output': ''}
+        with open(html_file, 'r', encoding='utf-8') as f: soup = BeautifulSoup(f, 'html.parser')
+        grade, feedback_lines = 0, []
+        if soup.title and soup.title.string:
+            grade += 50; feedback_lines.append("PASS: Page has a valid <title> tag.")
+        else:
+            feedback_lines.append("FAIL: Page is missing a <title> tag.")
+        if soup.find('h1'):
+            grade += 50; feedback_lines.append("PASS: An <h1> heading was found.")
+        else:
+            feedback_lines.append("FAIL: No <h1> heading was found.")
+        feedback = "\n".join(feedback_lines)
+        return {'grade': grade, 'feedback': feedback, 'output': feedback}
+    except Exception as e:
+        return {'grade': 0, 'feedback': "An error occurred while evaluating the web files.", 'output': str(e)}
+
+# ===============================================================
+# MAIN CELERY TASK
+# ===============================================================
+@celery.task(name='app.tasks.evaluate_submission')
+def evaluate_submission(submission_id):
+    db_config = current_app.config['DB_CONFIG']
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        cursor.execute("""
+            SELECT 
+                asub.file_path as submission_file,
+                a.evaluation_type,
+                a.test_case_file_path as test_file
+            FROM assignment_submissions asub
+            JOIN assignments a ON asub.assignment_id = a.assignment_id
+            WHERE asub.submission_id = %s
+        """, (submission_id,))
+        task_data = cursor.fetchone()
+
+        if not task_data or not task_data['evaluation_type'] or task_data['evaluation_type'] == 'none':
+            return "Not an auto-graded assignment."
+        
+        is_web_eval = task_data['evaluation_type'] == 'web'
+        if not is_web_eval and not task_data['test_file']:
+            raise ValueError("Test case file is missing for this evaluation type.")
+
+        cursor.execute("UPDATE assignment_submissions SET evaluation_status = 'processing' WHERE submission_id = %s", (submission_id,))
+        conn.commit()
+
+        base_path = current_app.root_path
+        submission_path = os.path.join(base_path, 'static', task_data['submission_file'])
+        test_case_path = os.path.join(base_path, 'static', task_data['test_file']) if task_data['test_file'] else None
+        
+        result = {}
+        evaluation_type = task_data['evaluation_type']
+
+        if evaluation_type == 'python':
+            result = _evaluate_python(submission_path, test_case_path)
+        elif evaluation_type == 'sql':
+            result = _evaluate_sql(submission_path, test_case_path)
+        elif evaluation_type == 'excel':
+            result = _evaluate_excel(submission_path, test_case_path)
+        elif evaluation_type == 'web':
+            result = _evaluate_web(submission_path, test_case_path)
+        else:
+            raise TypeError("Unsupported evaluation type.")
+
+        cursor.execute("""
+            UPDATE assignment_submissions 
+            SET auto_grade = %s, auto_feedback = %s, evaluation_output = %s, evaluation_status = 'completed'
+            WHERE submission_id = %s
+        """, (result.get('grade'), result.get('feedback'), result.get('output'), submission_id))
+        conn.commit()
+
+    except Exception as e:
+        # Ensure conn is defined for rollback
+        if 'conn' in locals() and conn.is_connected():
+            conn.rollback()
+            cursor.execute("UPDATE assignment_submissions SET evaluation_status = 'error', evaluation_output = %s WHERE submission_id = %s", (str(e), submission_id))
+            conn.commit()
+        print(f"CELERY TASK FAILED for submission_id {submission_id}: {e}")
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()

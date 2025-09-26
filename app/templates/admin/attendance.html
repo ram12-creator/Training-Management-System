@@ -1,0 +1,361 @@
+{% extends "base.html" %}
+
+{% block title %}Attendance Management{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('admin.dashboard') }}">Dashboard</a></li>
+        <li class="breadcrumb-item active" aria-current="page">Attendance</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12 mb-4">
+        <h1 class="h3 mb-0">Attendance Management</h1>
+        <p class="text-muted">Mark and manage student attendance for your courses.</p>
+    </div>
+</div>
+
+<div class="card shadow mb-4">
+    <div class="card-header bg-white py-3">
+        <h6 class="m-0 font-weight-bold text-primary">Filter Attendance</h6>
+    </div>
+    <div class="card-body">
+        <form id="filterForm" method="GET" action="{{ url_for('admin.attendance_management') }}">
+            <div class="row align-items-end">
+                <div class="col-md-4 mb-3">
+                    <label for="course_filter" class="form-label">Course</label>
+                    <select class="form-select" id="course_filter" name="course_id">
+                        <option value="">Select Course</option>
+                        {% for course in courses %}
+                        <option value="{{ course.course_id }}" {% if selected_course == course.course_id|string %}selected{% endif %}>
+                            {{ course.course_name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label for="batch_filter" class="form-label">Batch</label>
+                    <select class="form-select" id="batch_filter" name="batch_id">
+                        <option value="">Select a course first</option>
+                         {% for batch in batches %}
+                        <option value="{{ batch.batch_id }}" {% if selected_batch == batch.batch_id|string %}selected{% endif %}>
+                            {{ batch.batch_name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2 mb-3">
+                    <label for="date_filter" class="form-label">Date</label>
+                    <input type="date" class="form-control" id="date_filter" name="date" value="{{ selected_date }}">
+                </div>
+                <div class="col-md-2 mb-3">
+                     <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-filter me-2"></i>Load
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if attendance_data %}
+<div class="card shadow mb-4">
+    <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+        <h6 class="m-0 font-weight-bold text-primary">Mark Attendance for {{ selected_date }}</h6>
+        <div>
+            <button class="btn btn-sm btn-outline-success" id="markAllPresent">All Present</button>
+            <button class="btn btn-sm btn-outline-danger" id="markAllAbsent">All Absent</button>
+            <button class="btn btn-primary" id="saveAttendanceBtn">
+                <i class="fas fa-save me-2"></i>Save Attendance
+            </button>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead class="table-light">
+                    <tr>
+                        <th>Student Name</th>
+                        <th>Email</th>
+                        <th class="text-center">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for student in attendance_data %}
+                    <tr>
+                        <td>{{ student.full_name }}</td>
+                        <td>{{ student.email }}</td>
+                        <td class="text-center">
+                            <div class="btn-group btn-group-toggle" data-bs-toggle="buttons">
+                                <label class="btn btn-sm btn-outline-success {% if student.is_present == 1 %}active{% endif %}">
+                                    <input type="radio" name="attendance_{{ student.student_id }}" value="present" class="attendance-radio" data-student-id="{{ student.student_id }}" {% if student.is_present == 1 %}checked{% endif %}> Present
+                                </label>
+                                <label class="btn btn-sm btn-outline-danger {% if student.is_present == 0 %}active{% endif %}">
+                                    <input type="radio" name="attendance_{{ student.student_id }}" value="absent" class="attendance-radio" data-student-id="{{ student.student_id }}" {% if student.is_present == 0 %}checked{% endif %}> Absent
+                                </label>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% elif selected_batch and selected_date %}
+<div class="alert alert-warning text-center">No students found in this batch to mark attendance.</div>
+{% endif %}
+
+<!-- FEATURE ADDED: Attendance Reports & Statistics -->
+<div class="card shadow">
+    <div class="card-header bg-white py-3">
+        <h6 class="m-0 font-weight-bold text-primary">Attendance Reports</h6>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <div class="card h-100">
+                    <div class="card-body text-center d-flex flex-column justify-content-center">
+                        <i class="fas fa-download fa-3x text-primary mb-3"></i>
+                        <h5>Export Reports</h5>
+                        <p class="text-muted">Download attendance reports in CSV format for the selected batch.</p>
+                        {% if selected_batch %}
+                        <a href="{{ url_for('admin.export_attendance', batch_id=selected_batch) }}" class="btn btn-primary mt-auto">
+                            <i class="fas fa-file-export me-2"></i>Export CSV for Batch
+                        </a>
+                        {% else %}
+                        <button class="btn btn-primary mt-auto" disabled>
+                            <i class="fas fa-file-export me-2"></i>Select a Batch to Export
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 mb-3">
+                <div class="card h-100">
+                    <div class="card-body text-center d-flex flex-column justify-content-center">
+                        <i class="fas fa-chart-line fa-3x text-success mb-3"></i>
+                        <h5>View Statistics</h5>
+                        <p class="text-muted">Analyze attendance for the selected date and batch.</p>
+                        {% if attendance_data %}
+                        <button class="btn btn-success mt-auto" data-bs-toggle="modal" data-bs-target="#statisticsModal">
+                            <i class="fas fa-chart-bar me-2"></i>View Statistics
+                        </button>
+                        {% else %}
+                         <button class="btn btn-success mt-auto" disabled>
+                            <i class="fas fa-chart-bar me-2"></i>Load Data to View
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Statistics Modal -->
+<div class="modal fade" id="statisticsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Attendance Statistics for {{ selected_date }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <canvas id="attendanceChart" width="400" height="300"></canvas>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-body">
+                                <!-- <h6>Overall Statistics</h6>
+                                <div class="mb-3">
+                                    <span class="fw-bold">Total Students:</span> {{ attendance_data|length if attendance_data else 0 }}
+                                </div>
+                                <div class="mb-3">
+                                    <span class="fw-bold">Present Today:</span> 
+                                    <span class="badge bg-success fs-6">{{ attendance_data|selectattr('is_present')|list|length }}</span>
+                                </div>
+                                <div class="mb-3">
+                                    <span class="fw-bold">Absent Today:</span> 
+                                    <span class="badge bg-danger fs-6">{{ attendance_data|selectattr('marked')|rejectattr('is_present')|list|length }}</span>
+                                </div>
+                                <div>
+                                    <span class="fw-bold">Not Marked:</span> 
+                                    <span class="badge bg-warning fs-6">{{ attendance_data|rejectattr('marked')|list|length }}</span>
+                                </div> -->
+
+
+                                <h6>Overall Statistics</h6>
+<div class="mb-3">
+    <span class="fw-bold">Total Students:</span> 
+    <span id="statsTotalStudents" class="badge bg-primary fs-6">0</span>
+</div>
+<div class="mb-3">
+    <span class="fw-bold">Present Today:</span> 
+    <span id="statsPresentToday" class="badge bg-success fs-6">0</span>
+</div>
+<div class="mb-3">
+    <span class="fw-bold">Absent Today:</span> 
+    <span id="statsAbsentToday" class="badge bg-danger fs-6">0</span>
+</div>
+<div>
+    <span class="fw-bold">Not Marked:</span> 
+    <span id="statsNotMarked" class="badge bg-warning fs-6">0</span>
+</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Declare chart instance variable in a broader scope
+    let attendanceChartInstance = null;
+    
+    const statsModalEl = document.getElementById('statisticsModal');
+    const courseSelect = document.getElementById('course_filter');
+    const batchSelect = document.getElementById('batch_filter');
+
+    // --- Dynamic Batch Loading ---
+    async function loadBatchesForCourse(courseId, selectedBatchId = null) {
+        if (!courseId) {
+            batchSelect.innerHTML = '<option value="">Select a course first</option>';
+            return;
+        }
+        batchSelect.innerHTML = '<option value="">Loading...</option>';
+        const response = await fetch(`/admin/get_batches/${courseId}`);
+        const data = await response.json();
+        batchSelect.innerHTML = '<option value="">Select Batch</option>';
+        if (data.success) {
+            data.batches.forEach(batch => {
+                const selected = selectedBatchId && batch.batch_id == selectedBatchId ? 'selected' : '';
+                batchSelect.innerHTML += `<option value="${batch.batch_id}" ${selected}>${batch.batch_name}</option>`;
+            });
+        }
+    }
+    
+    courseSelect.addEventListener('change', () => loadBatchesForCourse(courseSelect.value));
+    
+    // Initial load if course is already selected on page load
+    if(courseSelect.value) {
+        loadBatchesForCourse(courseSelect.value, '{{ selected_batch }}');
+    }
+
+    // --- Statistics Modal Chart & Dynamic Data Calculation ---
+    statsModalEl?.addEventListener('show.bs.modal', function() {
+        // 1. Recalculate counts every time the modal is shown
+        let presentCount = 0;
+        let absentCount = 0;
+        
+        // This targets only the visible students in the table after filtering
+        const studentRows = document.querySelectorAll('tbody tr');
+        const totalStudents = studentRows.length;
+
+        studentRows.forEach(row => {
+            const presentRadio = row.querySelector('input[value="present"]');
+            const absentRadio = row.querySelector('input[value="absent"]');
+            
+            if (presentRadio && presentRadio.checked) {
+                presentCount++;
+            } else if (absentRadio && absentRadio.checked) {
+                absentCount++;
+            }
+        });
+
+        const notMarkedCount = totalStudents - (presentCount + absentCount);
+
+        // 2. Update the HTML elements in the modal with the new counts
+        document.getElementById('statsTotalStudents').textContent = totalStudents;
+        document.getElementById('statsPresentToday').textContent = presentCount;
+        document.getElementById('statsAbsentToday').textContent = absentCount;
+        document.getElementById('statsNotMarked').textContent = notMarkedCount;
+        
+        // 3. Destroy the old chart and create a new one with fresh data
+        const ctx = document.getElementById('attendanceChart').getContext('2d');
+        if(attendanceChartInstance) {
+            attendanceChartInstance.destroy();
+        }
+        attendanceChartInstance = new Chart(ctx, {
+            type: 'pie',
+            data: {
+                labels: ['Present', 'Absent', 'Not Marked'],
+                datasets: [{
+                    data: [presentCount, absentCount, notMarkedCount],
+                    backgroundColor: ['#1cc88a', '#e74a3b', '#f6c23e'],
+                    hoverBackgroundColor: ['#17a673', '#be2617', '#dda20a'],
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { position: 'bottom' } }
+            }
+        });
+    });
+
+    // --- Mark All Buttons & Save Logic ---
+    document.getElementById('markAllPresent')?.addEventListener('click', () => {
+        document.querySelectorAll('input[value="present"]').forEach(radio => {
+            radio.checked = true;
+            const label = radio.parentElement;
+            label.classList.add('active');
+            label.nextElementSibling.classList.remove('active');
+        });
+    });
+    
+    document.getElementById('markAllAbsent')?.addEventListener('click', () => {
+         document.querySelectorAll('input[value="absent"]').forEach(radio => {
+            radio.checked = true;
+            const label = radio.parentElement;
+            label.classList.add('active');
+            label.previousElementSibling.classList.remove('active');
+        });
+    });
+
+    document.getElementById('saveAttendanceBtn')?.addEventListener('click', async function() {
+        const present_ids = [];
+        const absent_ids = [];
+        
+        document.querySelectorAll('.attendance-radio:checked').forEach(radio => {
+            if (radio.value === 'present') {
+                present_ids.push(radio.dataset.studentId);
+            } else {
+                absent_ids.push(radio.dataset.studentId);
+            }
+        });
+        
+        const data = {
+            batch_id: document.getElementById('batch_filter').value,
+            attendance_date: document.getElementById('date_filter').value,
+            present_ids,
+            absent_ids
+        };
+
+        const response = await fetch('{{ url_for("admin.mark_attendance") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        const result = await response.json();
+        
+        alert(result.message);
+        if(result.success) {
+            const btn = this;
+            btn.innerHTML = '<i class="fas fa-check me-2"></i>Saved!';
+            setTimeout(() => { btn.innerHTML = '<i class="fas fa-save me-2"></i>Save Attendance'; }, 2000);
+        }
+    });
+});
+</script>
+{% endblock %}

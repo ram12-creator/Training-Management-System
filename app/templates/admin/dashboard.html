@@ -1,0 +1,314 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item active" aria-current="page"><i class="fas fa-tachometer-alt me-2"></i>Dashboard</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12 mb-4">
+        <h1 class="h3 mb-0">Admin Analytics Dashboard</h1>
+        <p class="text-muted">Welcome back, {{ current_user.full_name }}! Here's your operational command center.</p>
+    </div>
+</div>
+
+<!-- KPI Statistics Cards -->
+<div class="row mb-4">
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card border-left-primary shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Assigned Courses</div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800">{{ stats.total_courses }}</div>
+                    </div>
+                    <div class="col-auto"><i class="fas fa-book fa-2x text-gray-300"></i></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card border-left-success shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Total Students</div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800">{{ stats.total_students }}</div>
+                    </div>
+                    <div class="col-auto"><i class="fas fa-users fa-2x text-gray-300"></i></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card border-left-info shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-info text-uppercase mb-1">Active Batches</div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800">{{ stats.active_batches }}</div>
+                    </div>
+                    <div class="col-auto"><i class="fas fa-layer-group fa-2x text-gray-300"></i></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card border-left-warning shadow h-100 py-2 hover-effect">
+            <a href="{{ url_for('admin.leave_management') }}" class="text-decoration-none">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Pending Leaves</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ stats.pending_leaves }}</div>
+                        </div>
+                        <div class="col-auto"><i class="fas fa-calendar-times fa-2x text-gray-300"></i></div>
+                    </div>
+                </div>
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Row -->
+<div class="row">
+    <!-- Course Popularity Chart -->
+    <div class="col-xl-8 col-lg-7 mb-4">
+        <div class="card shadow h-100">
+            <div class="card-header bg-white py-3">
+                <h6 class="m-0 font-weight-bold text-primary">Course Popularity by Enrollment</h6>
+            </div>
+            <div class="card-body">
+                <div class="chart-container" style="height: 320px;">
+                    <canvas id="coursePopularityChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Side Charts -->
+    <div class="col-xl-4 col-lg-5 mb-4">
+        <!-- Leave Breakdown Chart -->
+        <div class="card shadow mb-4">
+            <div class="card-header bg-white py-3">
+                <h6 class="m-0 font-weight-bold text-primary">Leave Status Breakdown</h6>
+            </div>
+            <div class="card-body">
+                <div class="chart-container" style="height: 150px;">
+                    <canvas id="leaveStatusChart"></canvas>
+                </div>
+            </div>
+        </div>
+        <!-- Assignment Status Chart -->
+        <div class="card shadow">
+            <div class="card-header bg-white py-3">
+                <h6 class="m-0 font-weight-bold text-primary">Assignment Submission Status</h6>
+            </div>
+            <div class="card-body">
+                <div class="chart-container" style="height: 150px;">
+                    <canvas id="assignmentStatusChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Action Center Row -->
+<div class="row">
+    <div class="col-12">
+        <div class="card shadow">
+            <div class="card-header bg-white py-3">
+                <h6 class="m-0 font-weight-bold text-primary">Action Center & Alerts</h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <!-- Pending Leaves Report -->
+                    <div class="col-lg-6">
+                        <h6 class="text-warning"><i class="fas fa-exclamation-circle me-2"></i>Pending Leave Requests</h6>
+                        {% if pending_leaves_list %}
+                            <ul class="list-group list-group-flush mb-4">
+                            {% for leave in pending_leaves_list %}
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <strong>{{ leave.full_name }}</strong>
+                                        <small class="text-muted d-block">{{ leave.start_date.strftime('%b %d') }} - {{ leave.end_date.strftime('%b %d') }}</small>
+                                    </div>
+                                    <a href="{{ url_for('admin.leave_management') }}#actions-{{leave.leave_id}}" class="btn btn-sm btn-outline-primary">Review</a>
+                                </li>
+                            {% endfor %}
+                            </ul>
+                        {% else %}
+                            <div class="alert alert-success small">No pending leave requests. Great job!</div>
+                        {% endif %}
+                    </div>
+                    <!-- Students to Watch Report -->
+                    <div class="col-lg-6">
+                        <h6 class="text-danger"><i class="fas fa-flag me-2"></i>Students with Low Attendance (< 75%)</h6>
+                        {% if students_to_watch %}
+                            <ul class="list-group list-group-flush">
+                            {% for student in students_to_watch %}
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <strong>{{ student.full_name }}</strong>
+                                        <small class="text-muted d-block">{{ student.batch_name }}</small>
+                                    </div>
+                                    <span class="badge bg-danger rounded-pill">{{ "%.1f"|format(student.attendance_pct) }}%</span>
+                                </li>
+                            {% endfor %}
+                            </ul>
+                        {% else %}
+                            <div class="alert alert-success small">All students have good attendance records.</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6 mb-4">
+        <div class="card shadow h-100">
+            <div class="card-header bg-white py-3">
+                <h6 class="m-0 font-weight-bold text-primary">Upcoming Deadlines (Next 7 Days)</h6>
+            </div>
+            <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                {% if upcoming_deadlines %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead class="table-light" style="position: sticky; top: -1.25rem; z-index: 1;">
+                            <tr>
+                                <th>Assignment</th>
+                                <th>Batch</th>
+                                <th>Due Date</th>
+                                <th>Submissions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        {% for deadline in upcoming_deadlines %}
+                            <tr>
+                                <td>
+                                    {{ deadline.title }}
+                                    {% set time_left = deadline.due_date - now %}
+                                    <small class="d-block text-muted">
+                                    {% if time_left.days > 1 %}
+                                        <span class="badge bg-success">{{ time_left.days }} days left</span>
+                                    {% elif time_left.days == 1 %}
+                                        <span class="badge bg-warning">1 day left</span>
+                                    {% else %}
+                                        <span class="badge bg-danger">Due today</span>
+                                    {% endif %}
+                                    </small>
+                                </td>
+                                <td><span class="badge bg-info">{{ deadline.batch_name }}</span></td>
+                                <td>{{ deadline.due_date.strftime('%b %d @ %I:%M %p') }}</td>
+                                <td>
+                                    <div class="progress" style="height: 20px;" data-bs-toggle="tooltip" title="{{ deadline.submissions }} of {{ deadline.total_students }} submitted">
+                                        {% set percentage = (deadline.submissions / deadline.total_students * 100) if deadline.total_students > 0 else 0 %}
+                                        <div class="progress-bar bg-success" role="progressbar" style="width: '{{ percentage }}%';" aria-valuenow="{{ percentage }}" aria-valuemin="0" aria-valuemax="100">
+                                            {{ "%.0f"|format(percentage) }}%
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="alert alert-success text-center mt-3">No assignment deadlines in the next 7 days.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const chartData = JSON.parse('{{ chart_data | tojson | safe }}');
+
+    // --- 1. Course Popularity Chart (Horizontal Bar) ---
+    const popularityCtx = document.getElementById('coursePopularityChart')?.getContext('2d');
+    if (popularityCtx && chartData.course_popularity && chartData.course_popularity.labels.length > 0) {
+        new Chart(popularityCtx, {
+            type: 'bar',
+            data: {
+                labels: chartData.course_popularity.labels,
+                datasets: [{
+                    label: 'Students',
+                    data: chartData.course_popularity.data,
+                    backgroundColor: 'rgba(78, 115, 223, 0.8)',
+                    borderColor: 'rgba(78, 115, 223, 1)',
+                    borderWidth: 1,
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: { x: { beginAtZero: true } },
+                plugins: { legend: { display: false } }
+            }
+        });
+    } else if (popularityCtx) {
+        popularityCtx.font = "16px 'Poppins'";
+        popularityCtx.fillStyle = "#858796";
+        popularityCtx.textAlign = "center";
+        popularityCtx.fillText("No student enrollment data to show.", popularityCtx.canvas.width / 2, popularityCtx.canvas.height / 2);
+    }
+
+    // --- 2. Leave Status Chart (Pie Chart) ---
+    const leaveCtx = document.getElementById('leaveStatusChart')?.getContext('2d');
+    if (leaveCtx && chartData.leave_breakdown && chartData.leave_breakdown.data.some(d => d > 0)) {
+        new Chart(leaveCtx, {
+            type: 'pie',
+            data: {
+                labels: chartData.leave_breakdown.labels,
+                datasets: [{
+                    data: chartData.leave_breakdown.data,
+                    backgroundColor: ['#f6c23e', '#1cc88a', '#e74a3b'], // Yellow, Green, Red
+                    hoverBackgroundColor: ['#dda20a', '#17a673', '#be2617']
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+        });
+    } else if (leaveCtx) {
+        leaveCtx.font = "14px 'Poppins'";
+        leaveCtx.fillStyle = "#858796";
+        leaveCtx.textAlign = "center";
+        leaveCtx.fillText("No leave data available.", leaveCtx.canvas.width / 2, leaveCtx.canvas.height / 2);
+    }
+
+    // --- 3. Assignment Status Chart (Doughnut Chart) ---
+    const assignmentCtx = document.getElementById('assignmentStatusChart')?.getContext('2d');
+    if (assignmentCtx && chartData.assignment_status && chartData.assignment_status.data.some(d => d > 0)) {
+        new Chart(assignmentCtx, {
+            type: 'doughnut',
+            data: {
+                labels: chartData.assignment_status.labels,
+                datasets: [{
+                    data: chartData.assignment_status.data,
+                    backgroundColor: ['#1cc88a', '#36b9cc'], // Green, Teal
+                    hoverBackgroundColor: ['#17a673', '#2c9faf']
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, cutout: '70%', plugins: { legend: { position: 'right' } } }
+        });
+    } else if (assignmentCtx) {
+        assignmentCtx.font = "14px 'Poppins'";
+        assignmentCtx.fillStyle = "#858796";
+        assignmentCtx.textAlign = "center";
+        assignmentCtx.fillText("No submission data available.", assignmentCtx.canvas.width / 2, assignmentCtx.canvas.height / 2);
+    }
+});
+</script>
+{% endblock %}
