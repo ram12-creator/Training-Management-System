@@ -48,47 +48,7 @@ def restrict_to_super_admin():
         flash('Access denied. Super admin privileges required.', 'danger')
         return redirect(url_for('auth.login'))
 
-# @super_admin_bp.route('/dashboard')
-# @login_required
-# def dashboard():
-#     # Get statistics for dashboard
-#     conn = current_app.get_db_connection()
-#     stats = {
-#         'total_courses': 0,
-#         'active_courses': 0,
-#         'total_admins': 0,
-#         'total_trainers': 0,
-#         'total_students': 0
-#     }
-    
-#     if conn:
-#         try:
-#             cursor = conn.cursor(dictionary=True)
-            
-#             # Get course statistics
-#             cursor.execute("SELECT COUNT(*) as total, SUM(CASE WHEN is_active = TRUE THEN 1 ELSE 0 END) as active FROM courses")
-#             course_data = cursor.fetchone()
-#             if course_data:
-#                 stats['total_courses'] = course_data['total']
-#                 stats['active_courses'] = course_data['active']
-            
-#             # Get user statistics by role
-#             cursor.execute("SELECT role, COUNT(*) as count FROM users WHERE role IN ('admin', 'trainer', 'student') GROUP BY role")
-#             role_data = cursor.fetchall()
-#             for row in role_data:
-#                 if row['role'] == 'admin':
-#                     stats['total_admins'] = row['count']
-#                 elif row['role'] == 'trainer':
-#                     stats['total_trainers'] = row['count']
-#                 elif row['role'] == 'student':
-#                     stats['total_students'] = row['count']
-            
-#             cursor.close()
-#             conn.close()
-#         except mysql.connector.Error as err:
-#             flash(f'Error retrieving statistics: {err}', 'danger')
-    
-#     return render_template('super_admin/dashboard.html', stats=stats)
+
 
 def log_activity(user_id, action, table_affected, record_id, description):
     # This is a placeholder for your logging function. Ensure it exists and works.
@@ -180,34 +140,6 @@ def dashboard():
 
 
 # ____________________________________________________________________________
-
-# @super_admin_bp.route('/courses')
-# @login_required
-# def course_management():
-#     conn = current_app.get_db_connection()
-#     courses = []
-    
-#     if conn:
-#         try:
-#             cursor = conn.cursor(dictionary=True)
-#             cursor.execute("""
-#                 SELECT c.*, u.full_name as created_by_name 
-#                 FROM courses c 
-#                 LEFT JOIN users u ON c.created_by = u.user_id 
-#                 ORDER BY c.created_at DESC
-#             """)
-#             courses = cursor.fetchall()
-            
-#             # Get stats for each course
-#             for course in courses:
-#                 course['stats'] = get_course_stats(course['course_id'])
-            
-#             cursor.close()
-#             conn.close()
-#         except mysql.connector.Error as err:
-#             flash(f'Error retrieving courses: {err}', 'danger')
-    
-#     return render_template('super_admin/course_management.html', courses=courses)
 
 
 
@@ -332,204 +264,6 @@ def update_course(course_id):
 
 
 
-# __________________________________________________________________________________________
-
-# @super_admin_bp.route('/create_course', methods=['POST'])
-# @login_required
-# def create_course():
-#     # Get JSON data instead of form data
-#     data = request.get_json()
-    
-#     # Extract data with defaults
-#     course_name = data.get('course_name')
-#     description = data.get('description', '')
-#     duration_weeks = data.get('duration_weeks')
-#     max_leaves = data.get('max_leaves', 5)  # Default to 5 if not provided
-#     start_date = data.get('start_date')
-#     end_date = data.get('end_date')
-#     max_capacity = data.get('max_capacity')
-    
-#     # Validate input
-#     errors = {}
-    
-#     if not course_name:
-#         errors['course_name'] = 'Course name is required'
-    
-#     if not duration_weeks:
-#         errors['duration_weeks'] = 'Duration is required'
-#     else:
-#         try:
-#             duration_weeks = int(duration_weeks)
-#             if duration_weeks <= 0:
-#                 errors['duration_weeks'] = 'Duration must be a positive number'
-#         except ValueError:
-#             errors['duration_weeks'] = 'Duration must be a valid number'
-    
-#     if max_leaves:
-#         try:
-#             max_leaves = int(max_leaves)
-#             if max_leaves < 0:
-#                 errors['max_leaves'] = 'Maximum leaves cannot be negative'
-#         except ValueError:
-#             errors['max_leaves'] = 'Maximum leaves must be a valid number'
-    
-#     if not start_date:
-#         errors['start_date'] = 'Start date is required'
-    
-#     if not end_date:
-#         errors['end_date'] = 'End date is required'
-    
-#     if start_date and end_date:
-#         try:
-#             start_dt = datetime.strptime(start_date, '%Y-%m-%d')
-#             end_dt = datetime.strptime(end_date, '%Y-%m-%d')
-            
-#             if start_dt >= end_dt:
-#                 errors['end_date'] = 'End date must be after start date'
-#         except ValueError:
-#             if 'start_date' not in errors:
-#                 errors['start_date'] = 'Invalid date format'
-#             if 'end_date' not in errors:
-#                 errors['end_date'] = 'Invalid date format'
-    
-#     if not max_capacity:
-#         errors['max_capacity'] = 'Maximum capacity is required'
-#     else:
-#         try:
-#             max_capacity = int(max_capacity)
-#             if max_capacity <= 0:
-#                 errors['max_capacity'] = 'Maximum capacity must be a positive number'
-#         except ValueError:
-#             errors['max_capacity'] = 'Maximum capacity must be a valid number'
-    
-#     if errors:
-#         return jsonify({'success': False, 'message': 'Validation failed', 'errors': errors})
-    
-#     # Create course
-#     conn = current_app.get_db_connection()
-#     if conn:
-#         try:
-#             cursor = conn.cursor()
-#             cursor.execute(
-#                 "INSERT INTO courses (course_name, description, duration_weeks, max_leaves, start_date, end_date, max_capacity, created_by) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
-#                 (course_name, description, duration_weeks, max_leaves, start_date, end_date, max_capacity, current_user.user_id)
-#             )
-#             course_id = cursor.lastrowid
-#             conn.commit()
-            
-#             # Log activity
-#             log_activity(current_user.user_id, 'create', 'courses', course_id, f"Created course: {course_name}")
-            
-#             cursor.close()
-#             conn.close()
-            
-#             return jsonify({'success': True, 'message': 'Course created successfully', 'course_id': course_id})
-#         except mysql.connector.Error as err:
-#             conn.rollback()
-#             cursor.close()
-#             conn.close()
-#             return jsonify({'success': False, 'message': f'Error creating course: {err}'})
-    
-#     return jsonify({'success': False, 'message': 'Database connection error'})
-
-# # ___________________________________________________________-
-
-# @super_admin_bp.route('/update_course/<int:course_id>', methods=['POST'])
-# @login_required
-# def update_course(course_id):
-#     # Get JSON data instead of form data
-#     data = request.get_json()
-    
-#     course_name = data.get('course_name')
-#     description = data.get('description', '')
-#     duration_weeks = data.get('duration_weeks')
-#     max_leaves = data.get('max_leaves', 5)
-#     start_date = data.get('start_date')
-#     end_date = data.get('end_date')
-#     max_capacity = data.get('max_capacity')
-#     is_active = data.get('is_active', False)
-    
-#     # Validate input
-#     errors = {}
-    
-#     if not course_name:
-#         errors['course_name'] = 'Course name is required'
-    
-#     if not duration_weeks:
-#         errors['duration_weeks'] = 'Duration is required'
-#     else:
-#         try:
-#             duration_weeks = int(duration_weeks)
-#             if duration_weeks <= 0:
-#                 errors['duration_weeks'] = 'Duration must be a positive number'
-#         except ValueError:
-#             errors['duration_weeks'] = 'Duration must be a valid number'
-    
-#     if max_leaves:
-#         try:
-#             max_leaves = int(max_leaves)
-#             if max_leaves < 0:
-#                 errors['max_leaves'] = 'Maximum leaves cannot be negative'
-#         except ValueError:
-#             errors['max_leaves'] = 'Maximum leaves must be a valid number'
-    
-#     if not start_date:
-#         errors['start_date'] = 'Start date is required'
-    
-#     if not end_date:
-#         errors['end_date'] = 'End date is required'
-    
-#     if start_date and end_date:
-#         try:
-#             start_dt = datetime.strptime(start_date, '%Y-%m-%d')
-#             end_dt = datetime.strptime(end_date, '%Y-%m-%d')
-            
-#             if start_dt >= end_dt:
-#                 errors['end_date'] = 'End date must be after start date'
-#         except ValueError:
-#             if 'start_date' not in errors:
-#                 errors['start_date'] = 'Invalid date format'
-#             if 'end_date' not in errors:
-#                 errors['end_date'] = 'Invalid date format'
-    
-#     if not max_capacity:
-#         errors['max_capacity'] = 'Maximum capacity is required'
-#     else:
-#         try:
-#             max_capacity = int(max_capacity)
-#             if max_capacity <= 0:
-#                 errors['max_capacity'] = 'Maximum capacity must be a positive number'
-#         except ValueError:
-#             errors['max_capacity'] = 'Maximum capacity must be a valid number'
-    
-#     if errors:
-#         return jsonify({'success': False, 'message': 'Validation failed', 'errors': errors})
-    
-#     # Update course
-#     conn = current_app.get_db_connection()
-#     if conn:
-#         try:
-#             cursor = conn.cursor()
-#             cursor.execute(
-#                 "UPDATE courses SET course_name = %s, description = %s, duration_weeks = %s, max_leaves = %s, start_date = %s, end_date = %s, max_capacity = %s, is_active = %s WHERE course_id = %s",
-#                 (course_name, description, duration_weeks, max_leaves, start_date, end_date, max_capacity, is_active, course_id)
-#             )
-#             conn.commit()
-            
-#             # Log activity
-#             log_activity(current_user.user_id, 'update', 'courses', course_id, f"Updated course: {course_name}")
-            
-#             cursor.close()
-#             conn.close()
-            
-#             return jsonify({'success': True, 'message': 'Course updated successfully'})
-#         except mysql.connector.Error as err:
-#             conn.rollback()
-#             cursor.close()
-#             conn.close()
-#             return jsonify({'success': False, 'message': f'Error updating course: {err}'})
-    
-#     return jsonify({'success': False, 'message': 'Database connection error'})
 
 # _____________________________________________________________________________-
 
@@ -579,9 +313,6 @@ def delete_course(course_id):
 
 
 # ______________________________________________________________
-
-
-# ___________________________________
 @super_admin_bp.route('/create_admin', methods=['GET', 'POST'])
 @login_required
 def create_admin():
@@ -603,11 +334,8 @@ def create_admin():
         return render_template('super_admin/create_admin.html', courses=courses)
     
     # If it's a POST request, process the form
-    # Check if it's a JSON request by checking Content-Type
     content_type = request.headers.get('Content-Type', '')
     is_json = 'application/json' in content_type
-    
-    # For FormData requests (file uploads)
     is_form_data = 'multipart/form-data' in content_type
     
     if is_json:
@@ -647,7 +375,14 @@ def create_admin():
                 # Generate unique filename
                 ext = filename.rsplit('.', 1)[1].lower()
                 unique_filename = f"{email.split('@')[0]}_{int(time.time())}.{ext}"
-                file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], unique_filename)
+                
+                # --- CORRECTED CODE ---
+                # Define the correct folder for profile pictures
+                profile_pic_folder = os.path.join(current_app.config['UPLOAD_FOLDER'], 'profile_pictures')
+                # Construct the full path to save the file
+                file_path = os.path.join(profile_pic_folder, unique_filename)
+                # --- END CORRECTION ---
+
                 file.save(file_path)
                 profile_picture = unique_filename
     else:
@@ -736,8 +471,7 @@ def create_admin():
         })
     else:
         return jsonify({'success': False, 'message': 'Failed to create admin. Please try again.'})
-    
-# _________________________________________________________________________________________
+
 
 @super_admin_bp.route('/create_trainer', methods=['GET', 'POST'])
 @login_required
@@ -760,11 +494,8 @@ def create_trainer():
         return render_template('super_admin/create_trainer.html', courses=courses)
     
     # If it's a POST request, process the form
-    # Check if it's a JSON request by checking Content-Type
     content_type = request.headers.get('Content-Type', '')
     is_json = 'application/json' in content_type
-    
-    # For FormData requests (file uploads)
     is_form_data = 'multipart/form-data' in content_type
     
     if is_json:
@@ -775,6 +506,7 @@ def create_trainer():
         phone = data.get('phone')
         qualifications = data.get('qualifications', '')
         course_ids = data.get('course_ids', [])
+        gender = data.get('gender')
         profile_picture = None  # File uploads not supported in JSON requests
     elif is_form_data:
         # Handle form data
@@ -796,7 +528,9 @@ def create_trainer():
                 file_length = file.tell()
                 file.seek(0)
                 
-                if file_length > current_app.config['MAX_CONTENT_LENGTH']:
+                # Use 2MB limit directly instead of relying on config
+                MAX_FILE_SIZE = 2 * 1024 * 1024  # 2MB
+                if file_length > MAX_FILE_SIZE:
                     return jsonify({
                         'success': False, 
                         'errors': {'profile_picture': 'File size exceeds the maximum allowed (2MB)'}
@@ -806,7 +540,14 @@ def create_trainer():
                 # Generate unique filename
                 ext = filename.rsplit('.', 1)[1].lower()
                 unique_filename = f"{email.split('@')[0]}_{int(time.time())}.{ext}"
-                file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], unique_filename)
+
+                # Define the correct folder for profile pictures
+                profile_pic_folder = os.path.join(current_app.config['UPLOAD_FOLDER'], 'profile_pictures')
+                # Ensure directory exists
+                os.makedirs(profile_pic_folder, exist_ok=True)
+                # Construct the full path to save the file
+                file_path = os.path.join(profile_pic_folder, unique_filename)
+                
                 file.save(file_path)
                 profile_picture = unique_filename
     else:
@@ -836,7 +577,8 @@ def create_trainer():
     elif not validate_phone(phone):
         errors['phone'] = 'Please enter a valid phone number (10-15 digits)'
 
-    if not gender: errors['gender'] = 'Gender is required.'
+    if not gender: 
+        errors['gender'] = 'Gender is required.'
     
     if errors:
         return jsonify({'success': False, 'errors': errors})
@@ -855,9 +597,20 @@ def create_trainer():
     raw_password = generate_password(last_name, phone)
     hashed_password = hash_password(raw_password)
     
-    # Create user
-    user_id = User.create_user(email, hashed_password, full_name, phone, 'trainer', 
-                              current_user.user_id, first_name.strip(), last_name.strip(), qualifications, profile_picture,gender)
+    # Create user - USE POSITIONAL ARGUMENTS LIKE YOUR CREATE_ADMIN ROUTE
+    user_id = User.create_user(
+        email, 
+        hashed_password, 
+        full_name, 
+        phone, 
+        'trainer', 
+        current_user.user_id, 
+        first_name.strip(), 
+        last_name.strip(), 
+        qualifications, 
+        profile_picture,
+        gender
+    )
     
     if user_id:
         # Assign courses to trainer
@@ -874,9 +627,10 @@ def create_trainer():
                 cursor.close()
                 conn.close()
             except mysql.connector.Error as err:
-                conn.rollback()
-                cursor.close()
-                conn.close()
+                # Don't rollback the entire operation if course assignment fails
+                if conn.is_connected():
+                    cursor.close()
+                    conn.close()
                 return jsonify({
                     'success': True, 
                     'message': 'Trainer created but failed to assign some courses',
@@ -896,11 +650,8 @@ def create_trainer():
         })
     else:
         return jsonify({'success': False, 'message': 'Failed to create trainer. Please try again.'})
-# _______________________________________
 
-# ________________________
-
-
+# ___________________________________
 
 @super_admin_bp.route('/get_users/<role>')
 @login_required

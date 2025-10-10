@@ -13,44 +13,7 @@ import csv
 
 trainer_bp = Blueprint('trainer', __name__)
 
-# @trainer_bp.before_request
-# @login_required
-# def restrict_to_trainer():
-#     if not current_user.is_authenticated or current_user.role != 'trainer':
-#         flash('Access denied. Trainer privileges required.', 'danger')
-#         return redirect(url_for('auth.login'))
 
-# # FIX: The log_activity function now correctly matches the updated database schema
-# def log_activity(user_id, action, table_affected, record_id, description):
-#     """Helper function to log trainer activities."""
-#     conn = current_app.get_db_connection()
-#     if conn:
-#         try:
-#             cursor = conn.cursor()
-#             cursor.execute(
-#                 "INSERT INTO activity_logs (user_id, action, table_affected, record_id, description, ip_address) VALUES (%s, %s, %s, %s, %s, %s)",
-#                 (user_id, action, table_affected, record_id, description, request.remote_addr)
-#             )
-#             conn.commit()
-#         except mysql.connector.Error as err:
-#             # This error will now be fixed because the 'description' column exists
-#             print(f"Error logging activity: {err}")
-#             conn.rollback()
-#         finally:
-#             if conn.is_connected():
-#                 cursor.close()
-#                 conn.close()
-
-# def build_topic_tree(topics):
-#     topic_map = {topic['topic_id']: topic for topic in topics}
-#     tree = []
-#     for topic in topics:
-#         topic['children'] = []
-#         if topic.get('parent_topic_id') and topic['parent_topic_id'] in topic_map:
-#             topic_map[topic['parent_topic_id']]['children'].append(topic)
-#         else:
-#             tree.append(topic)
-#     return tree
 
 
 # --- Blueprint Setup and Helper Functions ---

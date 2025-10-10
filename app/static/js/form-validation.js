@@ -48,13 +48,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Email validation
-    // const emailInputs = document.querySelectorAll('input[type="email"]');
-    // emailInputs.forEach(input => {
-    //     input.addEventListener('blur', function() {
-    //         validateEmail(this);
-    //     });
-    // });
 
     // Email validation
 const emailInputs = document.querySelectorAll('input[type="email"]');
