@@ -100,133 +100,97 @@ def get_course_stats(course_id):
     return stats
 
 def get_user_stats(user_id, role):
-    """
-    Fetches statistics relevant to a specific user based on their role.
-    """
     conn = current_app.get_db_connection()
     stats = {
         'total_courses': 0, 'total_students': 0, 'pending_leaves': 0, 'active_batches': 0,
-        'total_topics': 0, 'total_assignments': 0, 'attendance_percentage': 0,
+        'total_trainers': 0, 'total_admins': 0, 'attendance_percentage': 0,
         'max_leaves': 0, 'remaining_leaves': 0, 'submitted_assignments': 0, 'avg_grade': 0
     }
     
-    if not conn:
-        return stats
+    if not conn: return stats
 
     try:
         cursor = conn.cursor(dictionary=True)
         
-        if role == 'admin':
-            # Fetches statistics for an Admin user's dashboard.
+        if role == 'super_admin':
+            cursor.execute("SELECT COUNT(*) as total FROM courses")
+            stats['total_courses'] = cursor.fetchone()['total']
+            
+            cursor.execute("SELECT COUNT(*) as total FROM students")
+            stats['total_students'] = cursor.fetchone()['total']
+            
+            cursor.execute("SELECT COUNT(*) as total FROM users WHERE role='admin'")
+            stats['total_admins'] = cursor.fetchone()['total']
+            
+            cursor.execute("SELECT COUNT(*) as total FROM users WHERE role='trainer'")
+            stats['total_trainers'] = cursor.fetchone()['total']
+
+        elif role == 'admin':
+            # Count Courses assigned to Admin
+            cursor.execute("SELECT COUNT(*) as count FROM course_admins WHERE admin_id = %s", (user_id,))
+            stats['total_courses'] = cursor.fetchone()['count']
+
+            # Count Students in Batches managed by Admin's Courses
             cursor.execute("""
-                SELECT 
-                    COUNT(DISTINCT ca.course_id) as total_courses,
-                    COUNT(DISTINCT s.student_id) as total_students,
-                    (SELECT COUNT(*) FROM leave_applications la_in
-                     JOIN students s_in ON la_in.student_id = s_in.student_id
-                     JOIN course_admins ca_in ON s_in.course_id = ca_in.course_id
-                     WHERE ca_in.admin_id = ca.admin_id AND la_in.status = 'pending') as pending_leaves,
-                    (SELECT COUNT(*) FROM batches b_in
-                     JOIN course_admins ca_in ON b_in.course_id = ca_in.course_id
-                     WHERE ca_in.admin_id = ca.admin_id AND b_in.is_active = TRUE) as active_batches
-                FROM course_admins ca
-                LEFT JOIN students s ON ca.course_id = s.course_id
+                SELECT COUNT(DISTINCT s.student_id) as count 
+                FROM students s
+                JOIN batches b ON s.batch_id = b.batch_id
+                JOIN course_admins ca ON b.course_id = ca.course_id
                 WHERE ca.admin_id = %s
-                GROUP BY ca.admin_id
             """, (user_id,))
-            admin_stats = cursor.fetchone()
-            if admin_stats:
-                stats.update(admin_stats)
+            stats['total_students'] = cursor.fetchone()['count']
+
+            # Count Active Batches (Using 'is_active')
+            cursor.execute("""
+                SELECT COUNT(*) as count 
+                FROM batches b
+                JOIN course_admins ca ON b.course_id = ca.course_id
+                WHERE ca.admin_id = %s AND b.is_active = TRUE
+            """, (user_id,))
+            stats['active_batches'] = cursor.fetchone()['count']
+
+            # Pending Leaves
+            cursor.execute("""
+                SELECT COUNT(*) as count 
+                FROM leave_applications la
+                JOIN students s ON la.student_id = s.student_id
+                JOIN batches b ON s.batch_id = b.batch_id
+                JOIN course_admins ca ON b.course_id = ca.course_id
+                WHERE ca.admin_id = %s AND la.status = 'pending'
+            """, (user_id,))
+            stats['pending_leaves'] = cursor.fetchone()['count']
 
         elif role == 'trainer':
-            # Fetches statistics for a Trainer user's dashboard.
             cursor.execute("""
-                SELECT
-                    -- Count active batches in courses this trainer is assigned to
-                    (SELECT COUNT(*) FROM batches b 
-                     JOIN course_trainers ct_in ON b.course_id = ct_in.course_id 
-                     WHERE ct_in.trainer_id = %s AND b.is_active = TRUE) as active_batches,
-
-                    -- Count total students in courses this trainer is assigned to
-                    (SELECT COUNT(DISTINCT bs.student_id) FROM batch_students bs
-                     JOIN batches b ON bs.batch_id = b.batch_id
-                     JOIN course_trainers ct_in ON b.course_id = ct_in.course_id
-                     WHERE ct_in.trainer_id = %s) as total_students,
-                     
-                    -- Calculate average grade across all assignments created by this trainer
-                    (SELECT AVG(
-                        CASE 
-                            WHEN grade IS NOT NULL THEN grade 
-                            ELSE auto_grade 
-                        END
-                     ) FROM assignment_submissions 
-                     WHERE assignment_id IN (SELECT assignment_id FROM assignments WHERE created_by = %s)) as average_grade,
-
-                    -- Count submissions that are submitted but not yet graded (manually or automatically)
-                    (SELECT COUNT(*) FROM assignment_submissions
-                     WHERE grade IS NULL AND auto_grade IS NULL AND evaluation_status != 'processing'
-                     AND assignment_id IN (SELECT assignment_id FROM assignments WHERE created_by = %s)) as ungraded_submissions
-
-            """, (user_id, user_id, user_id, user_id))
-            
-            trainer_stats = cursor.fetchone()
-            if trainer_stats:
-                stats.update(trainer_stats)
-                # Ensure numbers are nicely formatted
-                stats['average_grade'] = round(stats.get('average_grade', 0) or 0, 1)
-        
-        elif role == 'student':
-            # ===============================================================
-            # CORRECTED & FINAL QUERY for student dashboard KPIs
-            # ===============================================================
-            cursor.execute("""
-                SELECT
-                    COALESCE(AVG(att.is_present) * 100, 0) as attendance_percentage,
-                    
-                    -- Get the personal leave limit from the student's current BATCH
-                    b.personal_leave_limit as max_leaves,
-                    
-                    -- Correctly calculate remaining leaves by subtracting ONLY approved PERSONAL leaves
-                    (b.personal_leave_limit - (
-                        SELECT COALESCE(SUM(la.days_requested), 0) 
-                        FROM leave_applications la
-                        JOIN leave_types lt ON la.leave_type_id = lt.leave_type_id
-                        WHERE la.student_id = s.student_id AND la.batch_id = bs.batch_id 
-                          AND lt.type_name = 'Personal' AND la.status = 'approved'
-                    )) as remaining_leaves,
-
-                    (SELECT COUNT(*) FROM assignments a WHERE a.batch_id = bs.batch_id AND a.is_active = TRUE) as total_assignments,
-                    (SELECT COUNT(*) FROM assignment_submissions asub WHERE asub.student_id = s.student_id) as submitted_assignments,
-                    
-                    -- Correctly calculate average grade by prioritizing manual grade over auto-grade
-                    COALESCE((SELECT AVG(
-                        CASE 
-                            WHEN grade IS NOT NULL THEN grade 
-                            ELSE auto_grade 
-                        END
-                    ) FROM assignment_submissions asub WHERE asub.student_id = s.student_id AND (grade IS NOT NULL OR auto_grade IS NOT NULL)), 0) as avg_grade
-                FROM students s
-                JOIN users u ON s.user_id = u.user_id
-                LEFT JOIN batch_students bs ON s.student_id = bs.student_id AND bs.is_active = TRUE
-                LEFT JOIN batches b ON bs.batch_id = b.batch_id
-                LEFT JOIN attendance att ON s.student_id = att.student_id
-                WHERE s.user_id = %s
-                GROUP BY s.student_id, b.personal_leave_limit, bs.batch_id
+                SELECT COUNT(*) as count FROM batches b 
+                JOIN course_trainers ct ON b.course_id = ct.course_id 
+                WHERE ct.trainer_id = %s AND b.is_active = TRUE
             """, (user_id,))
-            
-            student_stats = cursor.fetchone()
-            if student_stats:
-                stats.update(student_stats)
-                # Ensure numbers are nicely formatted
-                stats['attendance_percentage'] = round(stats.get('attendance_percentage', 0), 1)
-                stats['avg_grade'] = round(stats.get('avg_grade', 0), 1)
-                stats['remaining_leaves'] = max(0, stats.get('remaining_leaves', 0)) # Prevent negative leaves
+            stats['active_batches'] = cursor.fetchone()['count']
+
+            cursor.execute("""
+                SELECT COUNT(DISTINCT s.student_id) as count
+                FROM students s
+                JOIN batches b ON s.batch_id = b.batch_id
+                JOIN course_trainers ct ON b.course_id = ct.course_id
+                WHERE ct.trainer_id = %s
+            """, (user_id,))
+            stats['total_students'] = cursor.fetchone()['count']
+
+        elif role == 'student':
+            # Student Stats
+            cursor.execute("""
+                SELECT 
+                    COALESCE(AVG(CASE WHEN status IN ('PRESENT', 'HALF_DAY_MORNING', 'HALF_DAY_AFTERNOON') THEN 1 ELSE 0 END) * 100, 0) as attendance_percentage
+                FROM attendance 
+                WHERE student_id = (SELECT student_id FROM students WHERE user_id = %s)
+            """, (user_id,))
+            att = cursor.fetchone()
+            stats['attendance_percentage'] = round(att['attendance_percentage'], 1) if att else 0
 
     except mysql.connector.Error as err:
-        print(f"Error getting user stats for role {role}: {err}")
+        print(f"Stats Error: {err}")
     finally:
-        if conn and conn.is_connected():
-            cursor.close()
-            conn.close()
+        if conn.is_connected(): cursor.close(); conn.close()
     
     return stats

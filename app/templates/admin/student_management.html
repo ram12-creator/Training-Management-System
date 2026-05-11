@@ -2,100 +2,146 @@
 
 {% block title %}Student Management{% endblock %}
 
-{% block breadcrumb %}
-<nav aria-label="breadcrumb">
-    <ol class="breadcrumb">
-        <li class="breadcrumb-item"><a href="{{ url_for('admin.dashboard') }}">Dashboard</a></li>
-        <li class="breadcrumb-item"><a href="{{ url_for('admin.batch_management') }}">Batch Management</a></li>
-        <li class="breadcrumb-item active" aria-current="page">Student Management</li>
-    </ol>
-</nav>
-{% endblock %}
-
 {% block content %}
 <div class="row">
     <div class="col-12 mb-4">
         <div class="d-flex justify-content-between align-items-center flex-wrap">
-             <h1 class="h3 mb-2">
-                Student Management 
-                {% if batch_name %}
-                    <span class="text-primary">| {{ batch_name }}</span>
-                {% endif %}
-            </h1>
-            <div class="btn-toolbar mb-2">
-                <button class="btn btn-outline-secondary me-2" data-bs-toggle="modal" data-bs-target="#filterModal">
-                    <i class="fas fa-filter me-2"></i>Filter Students
+             <div>
+                 <h1 class="h3 mb-1 text-gray-800">Student Directory</h1>
+                 <p class="text-muted small mb-0">Manage enrollments, track history, and process dropouts.</p>
+             </div>
+            <div class="btn-toolbar mb-2 gap-2">
+                <!-- Filter Trigger -->
+                <button class="btn btn-white shadow-sm border" type="button" data-bs-toggle="collapse" data-bs-target="#filterPanel">
+                    <i class="fas fa-filter text-primary me-2"></i>Filters
                 </button>
-                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createStudentModal">
-                    <i class="fas fa-user-plus me-2"></i>Add Student
-                </button>
+                <!-- New Enrollment Link (Links to Wizard) -->
+                <a href="{{ url_for('admin.add_student_wizard') }}" class="btn btn-primary shadow-sm">
+                    <i class="fas fa-user-plus me-2"></i>New Enrollment
+                </a>
             </div>
         </div>
     </div>
 </div>
 
-<div class="card shadow mb-4">
-    <div class="card-header bg-white py-3">
-        <h6 class="m-0 font-weight-bold text-primary">All Students</h6>
+<!-- Filter Panel (Collapsible) -->
+<div class="collapse mb-4 {{ 'show' if selected_course or selected_batch else '' }}" id="filterPanel">
+    <div class="card shadow-sm border-left-primary">
+        <div class="card-body bg-light">
+            <form method="GET" action="{{ url_for('admin.student_management') }}">
+                <div class="row align-items-end">
+                    <div class="col-md-4 mb-2">
+                        <label class="small text-muted fw-bold">Filter by Course</label>
+                        <select class="form-select" id="filterCourse" name="course_id">
+                            <option value="">All Courses</option>
+                            {% for course in courses %}
+                            <option value="{{ course.course_id }}" {% if course.course_id|string == selected_course|string %}selected{% endif %}>
+                                {{ course.course_name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4 mb-2">
+                        <label class="small text-muted fw-bold">Filter by Batch</label>
+                        <select class="form-select" id="filterBatch" name="batch_id">
+                            <option value="">Select Course First</option>
+                            <!-- Batches loaded via JS -->
+                            {% for batch in batches %}
+                            <option value="{{ batch.batch_id }}" {% if batch.batch_id|string == selected_batch|string %}selected{% endif %}>
+                                {{ batch.batch_name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2 mb-2">
+                        <button type="submit" class="btn btn-primary w-100"><i class="fas fa-search me-1"></i> Apply</button>
+                    </div>
+                    <div class="col-md-2 mb-2">
+                        <a href="{{ url_for('admin.student_management') }}" class="btn btn-outline-secondary w-100">Reset</a>
+                    </div>
+                </div>
+            </form>
+        </div>
     </div>
-    <div class="card-body">
+</div>
+
+<!-- Students Table -->
+<div class="card shadow mb-4">
+    <div class="card-header bg-white py-3 border-0">
+        <h6 class="m-0 font-weight-bold text-primary"><i class="fas fa-list me-2"></i>Enrolled Beneficiaries</h6>
+    </div>
+    <div class="card-body p-0">
         <div class="table-responsive">
-            <table class="table table-bordered table-hover" id="studentsTable">
+            <table class="table table-hover align-middle mb-0" id="studentsTable">
                 <thead class="table-light">
                     <tr>
-                        <th>Name</th>
-                        <th>Email & Phone</th>
-                        <th>Course</th>
-                        <th>Batch</th>
+                        <th class="ps-4">Beneficiary</th>
+                        <th>Contact Info</th>
+                        <th>Batch / Course</th>
                         <th>Status</th>
-                        <th>Actions</th>
+                        <th class="text-center">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for student in students %}
                     <tr>
-                        <td>{{ student.full_name }}</td>
-                        <td>
-                            <div>{{ student.email }}</div>
-                            <div class="small text-muted">{{ student.phone }}</div>
-                        </td>
-                        <td>{{ student.course_name }}</td>
-                        <td>
-                            <span class="badge bg-info">{{ student.batch_name or 'Not Assigned' }}</span>
-                        </td>
-                        <td>
-                            <div class="form-check form-switch">
-                                <input class="form-check-input status-toggle" type="checkbox" role="switch"
-                                       id="statusSwitch-{{ student.user_id }}"
-                                       data-user-id="{{ student.user_id }}"
-                                       {{ 'checked' if student.is_active else '' }}>
-                                <label class="form-check-label" for="statusSwitch-{{ student.user_id }}">
-                                    {{ 'Active' if student.is_active else 'Inactive' }}
-                                </label>
+                        <td class="ps-4">
+                            <div class="d-flex align-items-center">
+                                <div class="avatar-sm me-3 bg-light rounded-circle d-flex align-items-center justify-content-center text-primary fw-bold border" style="width: 40px; height: 40px;">
+                                    {{ student.full_name[0] }}
+                                </div>
+                                <div>
+                                    <div class="fw-bold text-dark">{{ student.full_name }}</div>
+                                    <div class="small text-muted">ID: {{ student.enrollment_id or 'Pending' }}</div>
+                                </div>
                             </div>
                         </td>
                         <td>
-                            <div class="btn-group btn-group-sm">
-                                <button class="btn btn-outline-info view-student-btn"
+                            <div class="d-flex flex-column small">
+                                <span><i class="fas fa-envelope fa-fw text-muted me-1"></i> {{ student.email }}</span>
+                                <span><i class="fas fa-phone fa-fw text-muted me-1"></i> {{ student.phone }}</span>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="badge bg-info text-dark mb-1">{{ student.batch_name or 'Unassigned' }}</span>
+                            <div class="small text-muted text-truncate" style="max-width: 150px;">{{ student.course_name }}</div>
+                        </td>
+                        <td>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input status-toggle" type="checkbox" 
+                                       data-user-id="{{ student.user_id }}"
+                                       {{ 'checked' if student.is_active else '' }}>
+                            </div>
+                        </td>
+                        <td class="text-center">
+                            <div class="btn-group shadow-sm">
+                                <!-- 1. View Summary (Modal) -->
+                                <button class="btn btn-sm btn-light border view-student-btn"
                                         data-student-id="{{ student.student_id }}"
-                                        data-bs-toggle="tooltip" title="View Details">
-                                    <i class="fas fa-eye"></i>
+                                        data-bs-toggle="tooltip" title="360° View">
+                                    <i class="fas fa-eye text-info"></i>
                                 </button>
-                                <button class="btn btn-outline-primary edit-student-btn"
-                                        data-bs-toggle="modal" data-bs-target="#editStudentModal"
-                                        data-student-id="{{ student.student_id }}"
-                                        data-user-id="{{ student.user_id }}"
-                                        data-full-name="{{ student.full_name }}"
-                                        data-email="{{ student.email }}"
-                                        data-phone="{{ student.phone }}"
-                                        data-course-id="{{ student.course_id }}"
-                                        data-batch-id="{{ student.batch_id }}"
-                                        data-is-active="{{ student.is_active }}"
-                                        data-gender="{{ student.gender }}">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button class="btn btn-outline-danger delete-student-btn" data-user-id="{{ student.user_id }}">
-                                    <i class="fas fa-trash"></i>
+                                
+                                <!-- 2. Edit Profile (Links to Wizard in Edit Mode) -->
+                                <a href="{{ url_for('admin.manage_student', student_id=student.student_id) }}" 
+                                   class="btn btn-sm btn-light border"
+                                   data-bs-toggle="tooltip" title="Edit Full Profile">
+                                    <i class="fas fa-edit text-primary"></i>
+                                </a>
+
+                                <!-- 3. Download PDF Report -->
+                                <a href="{{ url_for('admin.download_student_pdf', student_id=student.student_id) }}" 
+                                   class="btn btn-sm btn-light border"
+                                   target="_blank"
+                                   data-bs-toggle="tooltip" title="Download Report">
+                                    <i class="fas fa-file-pdf text-danger"></i>
+                                </a>
+                                
+                                <!-- 4. Request Dropout (Maker-Checker) -->
+                                <button class="btn btn-sm btn-light border" 
+                                        onclick="requestDropout({{ student.student_id }})"
+                                        data-bs-toggle="tooltip" title="Request Dropout">
+                                    <i class="fas fa-user-times text-warning"></i>
                                 </button>
                             </div>
                         </td>
@@ -107,471 +153,229 @@
     </div>
 </div>
 
-<!-- =============================================================== -->
-<!-- ALL MODALS BELOW                                                -->
-<!-- =============================================================== -->
-
-<!-- Filter Students Modal -->
-<div class="modal fade" id="filterModal" tabindex="-1">
-    <div class="modal-dialog">
+<!-- STUDENT 360 VIEW MODAL -->
+<div class="modal fade" id="studentDetailsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Filter Students</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title"><i class="fas fa-id-card-alt me-2"></i>Beneficiary 360° View</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-            <form method="GET" action="{{ url_for('admin.student_management') }}">
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label for="filterCourse" class="form-label">Course</label>
-                        <select class="form-select" id="filterCourse" name="course_id">
-                            <option value="">All Courses</option>
-                            {% for course in courses %}
-                            <option value="{{ course.course_id }}" {% if course.course_id == selected_course %}selected{% endif %}>
-                                {{ course.course_name }}
-                            </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label for="filterBatch" class="form-label">Batch</label>
-                        <select class="form-select" id="filterBatch" name="batch_id">
-                            <option value="">All Batches</option>
-                            {% for batch in batches %}
-                            <option value="{{ batch.batch_id }}" {% if batch.batch_id == selected_batch %}selected{% endif %}>
-                                {{ batch.batch_name }}
-                            </option>
-                            {% endfor %}
-                        </select>
-                    </div>
+            <div class="modal-body bg-light p-0" id="studentDetailsContent">
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status"></div>
                 </div>
-                <div class="modal-footer">
-                    <a href="{{ url_for('admin.student_management') }}" class="btn btn-secondary">Clear Filters</a>
-                    <button type="submit" class="btn btn-primary">Apply Filters</button>
-                </div>
-            </form>
+            </div>
         </div>
     </div>
 </div>
 
-<!-- Create Student Modal -->
-<div class="modal fade" id="createStudentModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Add New Student</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <form id="createStudentForm">
-                <div class="modal-body">
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label for="create_full_name" class="form-label">Full Name *</label>
-                            <input type="text" class="form-control" id="create_full_name" name="full_name" required>
-                            <div class="invalid-feedback" id="full_name-error"></div>
-                        </div>
-                         <div class="col-md-6 mb-3">
-                            <label for="create_email" class="form-label">Email Address *</label>
-                            <input type="email" class="form-control" id="create_email" name="email" required>
-                            <div class="invalid-feedback" id="email-error"></div>
-                        </div>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label for="create_phone" class="form-label">Phone Number *</label>
-                            <input type="tel" class="form-control" id="create_phone" name="phone" required>
-                            <div class="invalid-feedback" id="phone-error"></div>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            {# --- CONTEXT-AWARE LOGIC FOR COURSE FIELD --- #}
-                            {% if selected_batch_id and selected_course_id %}
-                                <input type="hidden" name="course_id" value="{{ selected_course_id }}">
-                                <label class="form-label">Course</label>
-                                <input type="text" class="form-control" 
-                                       value="{{ (courses|selectattr('course_id', 'equalto', selected_course_id)|first).course_name }}" disabled>
-                            {% else %}
-                                <label for="create_course_id" class="form-label">Course *</label>
-                                <select class="form-select dynamic-course" id="create_course_id" name="course_id" data-batch-target="#create_batch_id" required>
-                                    <option value="">Select Course</option>
-                                    {% for course in courses %}<option value="{{ course.course_id }}">{{ course.course_name }}</option>{% endfor %}
-                                </select>
-                                <div class="invalid-feedback" id="course_id-error"></div>
-                            {% endif %}
-                        </div>
-                    </div>
-                     <div class="mb-3">
-                        {# --- CONTEXT-AWARE LOGIC FOR BATCH FIELD --- #}
-                        {% if selected_batch_id %}
-                            <input type="hidden" name="batch_id" value="{{ selected_batch_id }}">
-                            <label class="form-label">Batch</label>
-                            <input type="text" class="form-control" value="{{ batch_name }}" disabled>
-                        {% else %}
-                            <label for="create_batch_id" class="form-label">Batch *</label>
-                            <select class="form-select" id="create_batch_id" name="batch_id" required>
-                                <option value="">Select a course first</option>
-                            </select>
-                            <div class="invalid-feedback" id="batch_id-error"></div>
-                        {% endif %}
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label class="form-label">Gender *</label>
-                        <div class="row">
-                            <div class="col-md-6"><div class="form-check"><input class="form-check-input" type="radio" name="gender" id="createGenderMale" value="Male" checked><label class="form-check-label" for="createGenderMale">Male</label></div></div>
-                            <div class="col-md-6"><div class="form-check"><input class="form-check-input" type="radio" name="gender" id="createGenderFemale" value="Female"><label class="form-check-label" for="createGenderFemale">Female</label></div></div>
-                        </div>
-                        <div class="invalid-feedback" id="gender-error"></div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Add Student</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- Edit Student Modal -->
-<div class="modal fade" id="editStudentModal" tabindex="-1">
-     <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Edit Student</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <form id="editStudentForm">
-                <input type="hidden" id="edit_student_id" name="student_id">
-                <input type="hidden" id="edit_user_id" name="user_id">
-                <div class="modal-body">
-                     <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label for="edit_full_name" class="form-label">Full Name *</label>
-                            <input type="text" class="form-control" id="edit_full_name" name="full_name" required>
-                        </div>
-                         <div class="col-md-6 mb-3">
-                            <label for="edit_email" class="form-label">Email Address *</label>
-                            <input type="email" class="form-control" id="edit_email" name="email" required>
-                        </div>
-                    </div>
-                    <div class="row">
-                         <div class="col-md-6 mb-3">
-                            <label for="edit_phone" class="form-label">Phone Number *</label>
-                            <input type="tel" class="form-control" id="edit_phone" name="phone" required>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label for="edit_course_id" class="form-label">Course *</label>
-                            <select class="form-select dynamic-course" id="edit_course_id" name="course_id" data-batch-target="#edit_batch_id" required>
-                                <option value="">Select Course</option>
-                                {% for course in courses %}<option value="{{ course.course_id }}">{{ course.course_name }}</option>{% endfor %}
-                            </select>
-                        </div>
-                    </div>
-                     <div class="mb-3">
-                        <label for="edit_batch_id" class="form-label">Batch</label>
-                        <select class="form-select" id="edit_batch_id" name="batch_id">
-                            <option value="">Select a course first</option>
-                        </select>
-                    </div>
-                     
-                    <div class="mb-3">
-                        <label class="form-label">Gender *</label>
-                        <div class="row">
-                            <div class="col-md-6"><div class="form-check"><input class="form-check-input" type="radio" name="gender" id="editGenderMale" value="Male"><label class="form-check-label" for="editGenderMale">Male</label></div></div>
-                            <div class="col-md-6"><div class="form-check"><input class="form-check-input" type="radio" name="gender" id="editGenderFemale" value="Female"><label class="form-check-label" for="editGenderFemale">Female</label></div></div>
-                        </div>
-                    </div>
-
-                     <div class="form-check form-switch mb-3">
-                        <input class="form-check-input" type="checkbox" id="edit_is_active" name="is_active">
-                        <label class="form-check-label" for="edit_is_active">Active</label>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Save Changes</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- Student Details Modal -->
-<div class="modal fade" id="studentDetailsModal" tabindex="-1">
-    <div class="modal-dialog modal-xl">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Student Details</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <div id="studentDetailsContent" class="text-center p-4">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-            </div>
-        </div>
-    </div>
-</div>
 {% endblock %}
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    $('#studentsTable').DataTable({ responsive: true });
+    $('#studentsTable').DataTable({ responsive: true, order: [[0, 'asc']] });
 
-    // --- ALL UTILITY AND EVENT LISTENER FUNCTIONS ---
-    // (This section contains all the JS for create, edit, delete, view, toggle, and filter)
+    // --- 1. FILTER LOGIC ---
+    const courseSelect = document.getElementById('filterCourse');
+    const batchSelect = document.getElementById('filterBatch');
 
-    function clearErrors(form) {
-        form.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
-    }
-
-    function displayErrors(form, errors) {
-        clearErrors(form);
-        for (const [field, message] of Object.entries(errors)) {
-            const input = form.querySelector(`[name="${field}"]`);
-            if (input) {
-                input.classList.add('is-invalid');
-                let errorDiv = input.closest('.mb-3').querySelector('.invalid-feedback');
-                if (errorDiv) { errorDiv.textContent = message; }
-            }
-        }
-    }
-    
-    async function loadBatches(courseId, selectedBatchId = null, batchSelectElement) {
-        batchSelectElement.innerHTML = '<option value="">Loading...</option>';
-        if (!courseId) {
-            batchSelectElement.innerHTML = '<option value="">Select a course first</option>';
-            return;
-        }
+    courseSelect.addEventListener('change', async function() {
+        const courseId = this.value;
+        batchSelect.innerHTML = '<option value="">Loading...</option>';
+        if (!courseId) { batchSelect.innerHTML = '<option value="">All Batches</option>'; return; }
+        
         try {
             const response = await fetch(`/admin/get_batches/${courseId}`);
             const data = await response.json();
-            batchSelectElement.innerHTML = '<option value="">Select Batch</option>';
+            batchSelect.innerHTML = '<option value="">All Batches</option>';
             if (data.success) {
                 data.batches.forEach(batch => {
-                    const selected = selectedBatchId && batch.batch_id == selectedBatchId ? 'selected' : '';
-                    batchSelectElement.innerHTML += `<option value="${batch.batch_id}" ${selected}>${batch.batch_name}</option>`;
+                    batchSelect.innerHTML += `<option value="${batch.batch_id}">${batch.batch_name}</option>`;
                 });
-            } else {
-                batchSelectElement.innerHTML = '<option value="">Error loading batches</option>';
             }
-        } catch (error) {
-            console.error("Error loading batches:", error);
-            batchSelectElement.innerHTML = '<option value="">Error loading batches</option>';
-        }
-    }
-    
-    document.querySelectorAll('.dynamic-course').forEach(select => {
-        select.addEventListener('change', function() {
-            const targetSelector = this.dataset.batchTarget;
-            const batchSelect = document.querySelector(targetSelector);
-            loadBatches(this.value, null, batchSelect);
-        });
+        } catch (e) { console.error(e); }
     });
 
-    document.getElementById('createStudentForm').addEventListener('submit', async function(e) {
-        e.preventDefault();
-        const form = e.target;
-        const data = Object.fromEntries(new FormData(form).entries());
-        data.gender = form.querySelector('input[name="gender"]:checked')?.value;
-        const response = await fetch('{{ url_for("admin.create_student") }}', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        });
-        const result = await response.json();
-        if (result.success) {
-            alert(result.message);
-            location.reload();
-        } else {
-            if (result.errors) displayErrors(form, result.errors);
-            else alert('Error: ' + result.message);
-        }
-    });
-
-    document.querySelectorAll('.edit-student-btn').forEach(button => {
-        button.addEventListener('click', async function() {
-            const data = this.dataset;
-            const form = document.getElementById('editStudentForm');
-            form.querySelector('#edit_student_id').value = data.studentId;
-            form.querySelector('#edit_user_id').value = data.userId;
-            form.querySelector('#edit_full_name').value = data.fullName;
-            form.querySelector('#edit_email').value = data.email;
-            form.querySelector('#edit_phone').value = data.phone;
-            form.querySelector('#edit_is_active').checked = (data.isActive == '1' || data.isActive.toLowerCase() == 'true');
-            const courseSelect = form.querySelector('#edit_course_id');
-            const batchSelect = form.querySelector('#edit_batch_id');
-            courseSelect.value = data.courseId;
-            await loadBatches(data.courseId, data.batchId, batchSelect);
-            const gender = data.gender;
-            if (gender === 'Male') { form.querySelector('#editGenderMale').checked = true; } 
-            else if (gender === 'Female') { form.querySelector('#editGenderFemale').checked = true; }
-        });
-    });
-    
-    document.getElementById('editStudentForm').addEventListener('submit', async function(e) {
-        e.preventDefault();
-        const form = e.target;
-        const studentId = form.querySelector('#edit_student_id').value;
-        const data = Object.fromEntries(new FormData(form).entries());
-        data.is_active = form.querySelector('#edit_is_active').checked;
-        data.gender = form.querySelector('input[name="gender"]:checked')?.value; 
-        const response = await fetch(`/admin/update_student/${studentId}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        });
-        const result = await response.json();
-        if (result.success) {
-            alert(result.message);
-            location.reload();
-        } else {
-            if (result.errors) displayErrors(form, result.errors);
-            else alert('Error: ' + result.message);
-        }
-    });
-
-    document.querySelectorAll('.delete-student-btn').forEach(button => {
-        button.addEventListener('click', async function() {
-            if (confirm('Are you sure you want to delete this student? This will remove their user account permanently.')) {
-                const userId = this.dataset.userId;
-                const response = await fetch(`/admin/delete_student/${userId}`, { method: 'POST' });
-                const result = await response.json();
-                alert(result.message);
-                if (result.success) location.reload();
-            }
-        });
-    });
-
-    document.querySelectorAll('.status-toggle').forEach(toggle => {
-        toggle.addEventListener('change', async function() {
-            const userId = this.dataset.userId;
-            const newStatus = this.checked;
-            const label = this.nextElementSibling;
-            const response = await fetch(`/admin/toggle_student_status/${userId}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ is_active: newStatus })
-            });
-            const result = await response.json();
-            if (result.success) {
-                label.textContent = newStatus ? 'Active' : 'Inactive';
-            } else {
-                alert('Error: ' + result.message);
-                this.checked = !newStatus;
-            }
-        });
-    });
-
-    // --- JAVASCRIPT FOR "VIEW STUDENT DETAILS" MODAL ---
-    const detailsModal = new bootstrap.Modal(document.getElementById('studentDetailsModal'));
-    const detailsContent = document.getElementById('studentDetailsContent');
-    let attendanceChartInstance = null;
-
-    document.querySelectorAll('.view-student-btn').forEach(button => {
-        button.addEventListener('click', function() {
-            loadStudentDetails(this.dataset.studentId);
-        });
-    });
-
-    async function loadStudentDetails(studentId) {
-        detailsContent.innerHTML = `<div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>`;
-        detailsModal.show();
+    // --- 2. DROPOUT REQUEST LOGIC ---
+    window.requestDropout = async function(id) {
+        if(!confirm("Are you sure? This will send a Dropout Request to the Super Admin. The student will remain active until approved.")) return;
         try {
-            const response = await fetch(`/admin/get_student_details/${studentId}`);
-            const data = await response.json();
+            const res = await fetch(`/admin/request_student_dropout/${id}`, { method: 'POST' });
+            const data = await res.json();
+            alert(data.message);
+        } catch(e) { alert("Error connecting to server"); }
+    };
+
+    // --- STUDENT 360 VIEW MODAL LOGIC ---
+    const detailsModal = new bootstrap.Modal(document.getElementById('studentDetailsModal'));
+    let modalChart = null; 
+
+    document.body.addEventListener('click', async function(e) {
+        // Use event delegation to handle clicks even after table pagination
+        const btn = e.target.closest('.view-student-btn');
+        if (!btn) return;
+        
+        const id = btn.dataset.studentId;
+        detailsModal.show();
+        
+        const content = document.getElementById('studentDetailsContent');
+        content.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary"></div><p class="mt-2">Loading Profile...</p></div>';
+
+        try {
+            const res = await fetch(`/admin/get_student_details/${id}`);
+            const data = await res.json();
+            
             if (data.success) {
-                renderStudentDetails(data);
+                const d = data.details;
+                const stats = data.att_stats;
+                
+                // Safe handling for image
+                const profilePic = d.profile_picture 
+                    ? `{{ url_for('static', filename='uploads/profile_pictures/') }}${d.profile_picture}` 
+                    : `{{ url_for('static', filename='images/logo.png') }}`;
+
+                content.innerHTML = `
+                    <div class="row g-0">
+                        <!-- LEFT PANEL -->
+                        <div class="col-lg-4 border-end bg-white p-4 text-center">
+                            <img src="${profilePic}" class="rounded-circle border p-1 mb-3 shadow-sm" width="120" height="120" style="object-fit: cover;">
+                            <h4 class="fw-bold text-dark mb-0">${d.full_name}</h4>
+                            <small class="text-muted">${d.enrollment_id || 'ID Pending'}</small>
+                            <div class="mt-2">
+                                <span class="badge bg-${d.is_active ? 'success' : 'secondary'}">${d.is_active ? 'Active' : 'Inactive'}</span>
+                                <span class="badge bg-info text-dark">${d.batch_name || 'No Batch'}</span>
+                            </div>
+                            
+                            <div class="text-start mt-4 small text-muted">
+                                <p class="mb-1"><i class="fas fa-envelope me-2"></i> ${d.email}</p>
+                                <p class="mb-1"><i class="fas fa-phone me-2"></i> ${d.phone}</p>
+                                <p class="mb-1"><i class="fas fa-id-card me-2"></i> ${d.aadhar_number || 'N/A'}</p>
+                                <p class="mb-1"><i class="fas fa-map-marker-alt me-2"></i> ${d.city || 'N/A'}</p>
+                            </div>
+
+                            <hr>
+                            <h6 class="fw-bold text-primary">Attendance: ${d.attendance_percentage}%</h6>
+                            <div style="height: 180px; position: relative;">
+                                <canvas id="modalAttChart"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- RIGHT PANEL -->
+                        <div class="col-lg-8 p-4 bg-light">
+                            <ul class="nav nav-tabs nav-fill mb-3" id="viewTabs">
+                                <li class="nav-item">
+                                    <button class="nav-link active fw-bold" data-bs-toggle="tab" data-bs-target="#tab-att">
+                                        <i class="fas fa-calendar-check me-2"></i> Attendance
+                                    </button>
+                                </li>
+                                <li class="nav-item">
+                                    <button class="nav-link fw-bold" data-bs-toggle="tab" data-bs-target="#tab-leave">
+                                        <i class="fas fa-envelope-open me-2"></i> Leaves
+                                    </button>
+                                </li>
+                            </ul>
+                            
+                            <div class="tab-content">
+                                <!-- Attendance List -->
+                                <div class="tab-pane fade show active" id="tab-att">
+                                    <div class="table-responsive bg-white border rounded" style="max-height: 400px;">
+                                        <table class="table table-sm table-hover mb-0">
+                                            <thead class="table-light sticky-top"><tr><th>Date</th><th>Status</th><th>Note</th></tr></thead>
+                                            <tbody>
+                                                ${data.att_history.map(r => `
+                                                    <tr>
+                                                        <td>${r.attendance_date}</td>
+                                                        <td><span class="badge bg-${getStatusColor(r.status)}">${r.status}</span></td>
+                                                        <td class="small text-muted">${r.notes || '-'}</td>
+                                                    </tr>
+                                                `).join('') || '<tr><td colspan="3" class="text-center p-3">No records found</td></tr>'}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                <!-- Leave List -->
+                                <div class="tab-pane fade" id="tab-leave">
+                                    <div class="table-responsive bg-white border rounded" style="max-height: 400px;">
+                                        <table class="table table-sm table-bordered mb-0">
+                                            <thead class="table-light sticky-top"><tr><th>Type</th><th>Dates</th><th>Status</th><th>Note</th></tr></thead>
+                                            <tbody>
+                                                ${data.leaves.map(l => `
+                                                    <tr>
+                                                        <td>${l.type_name || 'Leave'}</td>
+                                                        <td class="small">${l.start_date} to ${l.end_date}</td>
+                                                        <td><span class="badge bg-${l.status == 'approved' ? 'success' : l.status == 'rejected' ? 'danger' : 'warning'}">${l.status}</span></td>
+                                                        <td class="small text-muted">${l.admin_comments || '-'}</td>
+                                                    </tr>
+                                                `).join('') || '<tr><td colspan="4" class="text-center p-3">No leave history</td></tr>'}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                // Render Chart
+                if (modalChart) modalChart.destroy();
+                const ctx = document.getElementById('modalAttChart').getContext('2d');
+                
+                // Handle case where stats might be null (new student)
+                const p = stats?.present_count || 0;
+                const a = stats?.absent_count || 0;
+                const h = stats?.half_day_count || 0;
+                const l = stats?.leave_count || 0;
+
+                if (p+a+h+l === 0) {
+                     // Empty Chart visual
+                     modalChart = new Chart(ctx, {
+                        type: 'doughnut',
+                        data: { labels: ['No Data'], datasets: [{ data: [1], backgroundColor: ['#e9ecef'] }] },
+                        options: { events: [], plugins: { legend: { display: false } } }
+                     });
+                } else {
+                    modalChart = new Chart(ctx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: ['Present', 'Absent', 'Half Day', 'Leave'],
+                            datasets: [{
+                                data: [p, a, h, l],
+                                backgroundColor: ['#198754', '#dc3545', '#ffc107', '#0dcaf0'],
+                                borderWidth: 2,
+                                borderColor: '#ffffff'
+                            }]
+                        },
+                        options: { 
+                            responsive: true, 
+                            maintainAspectRatio: false,
+                            plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, font: { size: 10 } } } } 
+                        }
+                    });
+                }
+
             } else {
-                detailsContent.innerHTML = `<div class="alert alert-danger">${data.message}</div>`;
+                content.innerHTML = `<div class="alert alert-danger m-3">${data.message}</div>`;
             }
-        } catch (error) {
-            detailsContent.innerHTML = `<div class="alert alert-danger">An error occurred while fetching details.</div>`;
+        } catch (e) {
+            console.error(e);
+            content.innerHTML = `<div class="alert alert-danger m-3">Failed to load data.</div>`;
         }
-    }
-
-    function renderStudentDetails(data) {
-        const details = data.details;
-        detailsContent.innerHTML = `
-            <div class="row text-start">
-                <div class="col-md-5 mb-4"><div class="card h-100"><div class="card-body">
-                    <h5 class="card-title text-primary">${details.full_name}</h5>
-                    <p class="card-text mb-1"><i class="fas fa-envelope fa-fw me-2 text-muted"></i>${details.email}</p>
-                    <p class="card-text"><i class="fas fa-phone fa-fw me-2 text-muted"></i>${details.phone}</p><hr>
-                    <p class="card-text mb-1"><strong>Course:</strong> ${details.course_name}</p>
-                    <p class="card-text"><strong>Batch:</strong> ${details.batch_name || 'N/A'}</p>
-                    <p class="card-text"><strong>Status:</strong> <span class="badge bg-${details.is_active ? 'success' : 'secondary'}">${details.is_active ? 'Active' : 'Inactive'}</span></p>
-                </div></div></div>
-                <div class="col-md-7 mb-4"><div class="card h-100"><div class="card-header">Attendance Summary (Last 60 Records)</div><div class="card-body d-flex justify-content-center align-items-center" style="max-height: 250px;"><canvas id="attendancePieChart"></canvas></div></div></div>
-            </div>
-            <div class="row text-start">
-                <div class="col-lg-6 mb-4">
-                    <h5 class="mb-3">Attendance History</h5>
-                    <div class="table-responsive" style="max-height: 300px;"><table class="table table-sm table-striped">
-                        <thead class="table-light" style="position: sticky; top: 0;"><tr><th>Date</th><th>Status</th></tr></thead>
-                        <tbody>${generateAttendanceRows(data.attendance)}</tbody>
-                    </table></div>
-                </div>
-                <div class="col-lg-6 mb-4">
-                    <h5 class="mb-3">Leave History</h5>
-                    <div class="table-responsive" style="max-height: 300px;"><table class="table table-sm table-striped">
-                        <thead class="table-light" style="position: sticky; top: 0;"><tr><th>Type</th><th>Period</th><th>Days</th><th>Status</th></tr></thead>
-                        <tbody>${generateLeaveRows(data.leaves)}</tbody>
-                    </table></div>
-                </div>
-            </div>`;
-        renderAttendanceChart(data.attendance);
-    }
-    
-    function generateAttendanceRows(data) {
-        if (!data || data.length === 0) return '<tr><td colspan="2" class="text-center text-muted">No records found.</td></tr>';
-        return data.map(r => `<tr><td>${r.attendance_date}</td><td><span class="badge bg-${r.is_present ? 'success' : 'danger'}">${r.is_present ? 'Present' : 'Absent'}</span></td></tr>`).join('');
-    }
-
-    function generateLeaveRows(data) {
-        if (!data || data.length === 0) return '<tr><td colspan="4" class="text-center text-muted">No records found.</td></tr>';
-        const colors = { pending: 'warning', approved: 'success', rejected: 'danger' };
-        return data.map(l => `<tr><td>${l.type_name || 'N/A'}</td><td>${l.start_date} to ${l.end_date}</td><td>${l.days_requested}</td><td><span class="badge bg-${colors[l.status]}">${l.status}</span></td></tr>`).join('');
-    }
-
-    function renderAttendanceChart(data) {
-        const ctx = document.getElementById('attendancePieChart')?.getContext('2d');
-        if (!ctx) return;
-        if (attendanceChartInstance) attendanceChartInstance.destroy();
-        if (!data || data.length === 0) {
-            ctx.font = "16px 'Poppins'"; ctx.fillStyle = "#858796"; ctx.textAlign = "center";
-            ctx.fillText("No attendance data to display.", ctx.canvas.width / 2, ctx.canvas.height / 2);
-            return;
-        }
-        const present = data.filter(a => a.is_present).length;
-        const absent = data.length - present;
-        attendanceChartInstance = new Chart(ctx, {
-            type: 'doughnut',
-            data: { labels: ['Present', 'Absent'], datasets: [{ data: [present, absent], backgroundColor: ['#1cc88a', '#e74a3b'] }] },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
-        });
-    }
-    
-    // --- JAVASCRIPT FOR THE FILTER MODAL ---
-    const filterCourseSelect = document.getElementById('filterCourse');
-    const filterBatchSelect = document.getElementById('filterBatch');
-
-    filterCourseSelect.addEventListener('change', function() {
-        loadBatches(this.value, null, filterBatchSelect);
     });
 
-    // Initialize Bootstrap tooltips
-    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-        return new bootstrap.Tooltip(tooltipTriggerEl);
-    });
+    function getStatusColor(status) {
+        if(status === 'PRESENT') return 'success';
+        if(status === 'ABSENT') return 'danger';
+        if(status.includes('HALF')) return 'warning';
+        return 'info';
+    }
+
+    // --- 3. VIEW MODAL (Logic is same as previously provided, ensures chart renders) ---
+    // (This part assumes the modal logic provided in previous steps is integrated here or loaded via main.js)
+    // To ensure it works, paste the Modal Logic I provided in the previous "Student View" response here if needed.
 });
 </script>
 {% endblock %}

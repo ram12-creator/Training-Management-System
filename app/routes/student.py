@@ -41,6 +41,102 @@ def log_activity(user_id, action, table_affected, record_id, description):
 
 
 
+# @student_bp.route('/dashboard')
+# def dashboard():
+#     stats = get_user_stats(current_user.user_id, 'student')
+#     conn = current_app.get_db_connection()
+#     upcoming_assignments = []
+#     recent_feedback = []
+#     chart_data = {}
+
+#     if not conn:
+#         flash('Database connection error.', 'danger')
+#         return render_template('student/dashboard.html', stats=stats, upcoming_assignments=[], recent_feedback=[], chart_data={})
+
+#     try:
+#         cursor = conn.cursor(dictionary=True)
+        
+#         cursor.execute("""
+#             SELECT s.student_id, bs.batch_id
+#             FROM students s
+#             LEFT JOIN batch_students bs ON s.student_id = bs.student_id AND bs.is_active = TRUE
+#             WHERE s.user_id = %s
+#         """, (current_user.user_id,))
+#         student_data = cursor.fetchone()
+        
+#         if student_data:
+#             student_id = student_data['student_id']
+#             batch_id = student_data['batch_id']
+
+#             # --- Fetch Data for Actionable Lists ---
+#             if batch_id:
+#                 cursor.execute("""
+#                     SELECT a.title, a.due_date, t.topic_name
+#                     FROM assignments a
+#                     JOIN topics t ON a.topic_id = t.topic_id
+#                     WHERE a.batch_id = %s AND a.due_date >= NOW() AND a.is_active = TRUE
+#                     AND a.assignment_id NOT IN (SELECT assignment_id FROM assignment_submissions WHERE student_id = %s)
+#                     ORDER BY a.due_date ASC
+#                     LIMIT 5
+#                 """, (batch_id, student_id))
+#                 upcoming_assignments = cursor.fetchall()
+            
+#             cursor.execute("""
+#                 SELECT a.title, asub.grade, asub.feedback, asub.graded_at
+#                 FROM assignment_submissions asub
+#                 JOIN assignments a ON asub.assignment_id = a.assignment_id
+#                 WHERE asub.student_id = %s AND asub.grade IS NOT NULL
+#                 ORDER BY asub.graded_at DESC
+#                 LIMIT 5
+#             """, (student_id,))
+#             recent_feedback = cursor.fetchall()
+
+#             # --- Fetch Data for Charts ---
+#             # Chart 1: Grade Trajectory (Line Chart)
+#             cursor.execute("""
+#                 SELECT a.title, asub.grade
+#                 FROM assignment_submissions asub
+#                 JOIN assignments a ON asub.assignment_id = a.assignment_id
+#                 WHERE asub.student_id = %s AND asub.grade IS NOT NULL
+#                 ORDER BY a.due_date ASC
+#             """, (student_id,))
+#             grades = cursor.fetchall()
+#             chart_data['grade_trajectory'] = {
+#                 'labels': [g['title'] for g in grades],
+#                 'data': [g['grade'] for g in grades]
+#             }
+
+#             # Chart 2: Performance by Topic (Radar Chart)
+#             cursor.execute("""
+#                 SELECT t.topic_name, AVG(asub.grade) as avg_grade
+#                 FROM assignment_submissions asub
+#                 JOIN assignments a ON asub.assignment_id = a.assignment_id
+#                 JOIN topics t ON a.topic_id = t.topic_id
+#                 WHERE asub.student_id = %s AND asub.grade IS NOT NULL
+#                 GROUP BY t.topic_id, t.topic_name
+#             """, (student_id,))
+#             topic_grades = cursor.fetchall()
+#             chart_data['topic_performance'] = {
+#                 'labels': [tg['topic_name'] for tg in topic_grades],
+#                 'data': [round(tg['avg_grade'], 1) if tg['avg_grade'] else 0 for tg in topic_grades]
+#             }
+        
+#     except mysql.connector.Error as err:
+#         flash(f'Error retrieving dashboard data: {err}', 'danger')
+#         print(f"Student Dashboard Error: {err}")
+#     finally:
+#         if conn and conn.is_connected():
+#             cursor.close()
+#             conn.close()
+    
+#     return render_template('student/dashboard.html', 
+#                          stats=stats, 
+#                          upcoming_assignments=upcoming_assignments,
+#                          recent_feedback=recent_feedback,
+#                          chart_data=chart_data,
+#                          now=datetime.now())
+
+
 @student_bp.route('/dashboard')
 def dashboard():
     stats = get_user_stats(current_user.user_id, 'student')
@@ -56,6 +152,7 @@ def dashboard():
     try:
         cursor = conn.cursor(dictionary=True)
         
+        # Get Student ID and Batch info
         cursor.execute("""
             SELECT s.student_id, bs.batch_id
             FROM students s
@@ -67,6 +164,27 @@ def dashboard():
         if student_data:
             student_id = student_data['student_id']
             batch_id = student_data['batch_id']
+
+            # --- FIX: Recalculate Average Grade Explicitly (Manual + Auto) ---
+            # This ensures the KPI card is accurate regardless of what get_user_stats returns
+            cursor.execute("""
+                SELECT AVG(
+                    CASE 
+                        WHEN grade IS NOT NULL THEN grade 
+                        WHEN auto_grade IS NOT NULL THEN auto_grade
+                        ELSE NULL 
+                    END
+                ) as real_average
+                FROM assignment_submissions 
+                WHERE student_id = %s AND (grade IS NOT NULL OR auto_grade IS NOT NULL)
+            """, (student_id,))
+            avg_result = cursor.fetchone()
+            
+            # Update the stats dictionary
+            if avg_result and avg_result['real_average'] is not None:
+                stats['average_grade'] = round(float(avg_result['real_average']), 1)
+            else:
+                stats['average_grade'] = 0
 
             # --- Fetch Data for Actionable Lists ---
             if batch_id:
@@ -81,23 +199,28 @@ def dashboard():
                 """, (batch_id, student_id))
                 upcoming_assignments = cursor.fetchall()
             
+            # Updated to show Auto Grade if Manual Grade is missing
             cursor.execute("""
-                SELECT a.title, asub.grade, asub.feedback, asub.graded_at
+                SELECT a.title, 
+                       COALESCE(asub.grade, asub.auto_grade) as grade, 
+                       asub.feedback, asub.auto_feedback, asub.graded_at, asub.evaluation_status
                 FROM assignment_submissions asub
                 JOIN assignments a ON asub.assignment_id = a.assignment_id
-                WHERE asub.student_id = %s AND asub.grade IS NOT NULL
+                WHERE asub.student_id = %s AND (asub.grade IS NOT NULL OR asub.auto_grade IS NOT NULL)
                 ORDER BY asub.graded_at DESC
                 LIMIT 5
             """, (student_id,))
             recent_feedback = cursor.fetchall()
 
             # --- Fetch Data for Charts ---
-            # Chart 1: Grade Trajectory (Line Chart)
+            
+            # Chart 1: Grade Trajectory (Line Chart) - FIXED to include Auto Grades
             cursor.execute("""
-                SELECT a.title, asub.grade
+                SELECT a.title, 
+                       COALESCE(asub.grade, asub.auto_grade) as grade
                 FROM assignment_submissions asub
                 JOIN assignments a ON asub.assignment_id = a.assignment_id
-                WHERE asub.student_id = %s AND asub.grade IS NOT NULL
+                WHERE asub.student_id = %s AND (asub.grade IS NOT NULL OR asub.auto_grade IS NOT NULL)
                 ORDER BY a.due_date ASC
             """, (student_id,))
             grades = cursor.fetchall()
@@ -106,13 +229,14 @@ def dashboard():
                 'data': [g['grade'] for g in grades]
             }
 
-            # Chart 2: Performance by Topic (Radar Chart)
+            # Chart 2: Performance by Topic (Radar Chart) - FIXED to include Auto Grades
             cursor.execute("""
-                SELECT t.topic_name, AVG(asub.grade) as avg_grade
+                SELECT t.topic_name, 
+                       AVG(COALESCE(asub.grade, asub.auto_grade)) as avg_grade
                 FROM assignment_submissions asub
                 JOIN assignments a ON asub.assignment_id = a.assignment_id
                 JOIN topics t ON a.topic_id = t.topic_id
-                WHERE asub.student_id = %s AND asub.grade IS NOT NULL
+                WHERE asub.student_id = %s AND (asub.grade IS NOT NULL OR asub.auto_grade IS NOT NULL)
                 GROUP BY t.topic_id, t.topic_name
             """, (student_id,))
             topic_grades = cursor.fetchall()
@@ -424,34 +548,48 @@ def profile():
     if conn:
         try:
             cursor = conn.cursor(dictionary=True)
+            
+            # UPDATED QUERY:
+            # 1. Replaced 's.enrollment_date' with 's.created_at as enrollment_date'
+            # 2. Updated JOINs to go Student -> Batch -> Course (New Schema Logic)
             cursor.execute("""
-                SELECT s.student_id, s.enrollment_date, u.is_active,
-                       u.full_name, u.email, u.phone, u.created_at,
-                       c.course_name, b.start_date, b.end_date,
-                       b.batch_name
+                SELECT 
+                    s.student_id, 
+                    s.created_at as enrollment_date,  -- <--- FIXED HERE
+                    u.is_active,
+                    u.full_name, u.email, u.phone, u.created_at,
+                    c.course_name, 
+                    b.start_date, b.end_date, b.batch_name
                 FROM students s 
                 JOIN users u ON s.user_id = u.user_id 
-                LEFT JOIN courses c ON s.course_id = c.course_id 
-                LEFT JOIN batch_students bs ON s.student_id = bs.student_id AND bs.is_active = TRUE
-                LEFT JOIN batches b ON bs.batch_id = b.batch_id
+                LEFT JOIN batches b ON s.batch_id = b.batch_id
+                LEFT JOIN courses c ON b.course_id = c.course_id
                 WHERE s.user_id = %s
             """, (current_user.user_id,))
+            
             student_data = cursor.fetchone()
 
             if student_data and student_data.get('start_date') and student_data.get('end_date'):
                 # Safely calculate progress
                 total_duration = (student_data['end_date'] - student_data['start_date']).days
                 days_completed = (datetime.now().date() - student_data['start_date']).days
+                
                 if total_duration > 0:
-                    student_data['progress_percentage'] = min(100, round((days_completed / total_duration) * 100))
+                    percentage = (days_completed / total_duration) * 100
+                    # Clamp value between 0 and 100
+                    student_data['progress_percentage'] = max(0, min(100, round(percentage)))
                 else:
                     student_data['progress_percentage'] = 0
+                    
                 student_data['days_completed'] = max(0, days_completed)
+        
+        except mysql.connector.Error as err:
+            print(f"Profile Error: {err}")
+            flash('Error loading profile.', 'danger')
         finally:
             if conn.is_connected(): conn.close()
             
     return render_template('student/profile.html', student_data=student_data, now=datetime.now())
-
 
 
 @student_bp.route('/update_profile', methods=['POST'])

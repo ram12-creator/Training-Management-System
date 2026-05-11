@@ -1,21 +1,17 @@
-
 from flask_login import UserMixin
 import mysql.connector
 from flask import current_app
 import bcrypt
 from datetime import datetime, timedelta
-from werkzeug.security import generate_password_hash
-# ... (other imports) ...
 
-# Import login_manager from your app's main file (e.g., app/__init__.py)
 from app import login_manager
 
 class User(UserMixin):
     def __init__(self, user_id, email, password_hash, full_name, phone, role, is_active, 
-                 created_by=None, first_name=None, last_name=None, qualifications=None, profile_picture=None,gender = None,
-                 # Student-specific attributes (fetched when user.role == 'student' or when context requires it)
+                 created_by=None, first_name=None, last_name=None, qualifications=None, profile_picture=None, gender=None,
+                 # Student-specific attributes
                  student_id=None, course_id=None, enrollment_date=None, course_name=None,
-                 batch_id=None, batch_name=None): # Added batch_id and batch_name
+                 batch_id=None, batch_name=None):
         
         self.user_id = user_id
         self.email = email
@@ -36,8 +32,8 @@ class User(UserMixin):
         self.course_id = course_id
         self.enrollment_date = enrollment_date
         self.course_name = course_name
-        self.batch_id = batch_id # Store batch_id
-        self.batch_name = batch_name # Store batch_name
+        self.batch_id = batch_id
+        self.batch_name = batch_name
 
     @property
     def is_active(self):
@@ -55,15 +51,20 @@ class User(UserMixin):
         conn = current_app.get_db_connection()
         if conn:
             cursor = conn.cursor(dictionary=True)
-            # Query to fetch user details, joining student, batch, and course info if available
+            # UPDATED QUERY: Joins batches to get course info
             cursor.execute("""
-                SELECT u.*, s.student_id, s.course_id, s.enrollment_date, c.course_name, b.batch_name, b.batch_id,u.gender
+                SELECT 
+                    u.*, 
+                    s.student_id, 
+                    b.course_id,         -- Get course_id from batches table
+                    s.created_at as enrollment_date, 
+                    c.course_name, 
+                    b.batch_name, 
+                    b.batch_id
                 FROM users u 
                 LEFT JOIN students s ON u.user_id = s.user_id 
-                -- Correct join path: students -> batch_students -> batches
-                LEFT JOIN batch_students bs ON s.student_id = bs.student_id AND bs.is_active = TRUE 
-                LEFT JOIN batches b ON bs.batch_id = b.batch_id 
-                LEFT JOIN courses c ON s.course_id = c.course_id 
+                LEFT JOIN batches b ON s.batch_id = b.batch_id 
+                LEFT JOIN courses c ON b.course_id = c.course_id 
                 WHERE u.user_id = %s
             """, (user_id,))
             user_data = cursor.fetchone()
@@ -80,9 +81,12 @@ class User(UserMixin):
                     profile_picture=user_data.get('profile_picture'),
                     gender=user_data.get('gender'),
                     # Student specific data
-                    student_id=user_data.get('student_id'), course_id=user_data.get('course_id'),
-                    enrollment_date=user_data.get('enrollment_date'), course_name=user_data.get('course_name'),
-                    batch_id=user_data.get('batch_id'), batch_name=user_data.get('batch_name')
+                    student_id=user_data.get('student_id'), 
+                    course_id=user_data.get('course_id'),
+                    enrollment_date=user_data.get('enrollment_date'), 
+                    course_name=user_data.get('course_name'),
+                    batch_id=user_data.get('batch_id'), 
+                    batch_name=user_data.get('batch_name')
                 )
         return None
     
@@ -91,14 +95,20 @@ class User(UserMixin):
         conn = current_app.get_db_connection()
         if conn:
             cursor = conn.cursor(dictionary=True)
-            # Fetch user by email, also joining student/batch/course info if available
+            # UPDATED QUERY: Joins batches to get course info
             cursor.execute("""
-                SELECT u.*, s.student_id, s.course_id, s.enrollment_date, c.course_name, b.batch_name, b.batch_id,u.gender
+                SELECT 
+                    u.*, 
+                    s.student_id, 
+                    b.course_id,         -- Get course_id from batches table
+                    s.created_at as enrollment_date, 
+                    c.course_name, 
+                    b.batch_name, 
+                    b.batch_id
                 FROM users u 
                 LEFT JOIN students s ON u.user_id = s.user_id 
-                LEFT JOIN batch_students bs ON s.student_id = bs.student_id AND bs.is_active = TRUE
-                LEFT JOIN batches b ON bs.batch_id = b.batch_id 
-                LEFT JOIN courses c ON s.course_id = c.course_id 
+                LEFT JOIN batches b ON s.batch_id = b.batch_id 
+                LEFT JOIN courses c ON b.course_id = c.course_id 
                 WHERE u.email = %s
             """, (email,))
             user_data = cursor.fetchone()
@@ -113,10 +123,14 @@ class User(UserMixin):
                     created_by=user_data.get('created_by'), first_name=user_data.get('first_name'),
                     last_name=user_data.get('last_name'), qualifications=user_data.get('qualifications'),
                     profile_picture=user_data.get('profile_picture'),
+                    gender=user_data.get('gender'),
                     # Student specific data
-                    student_id=user_data.get('student_id'), course_id=user_data.get('course_id'),
-                    enrollment_date=user_data.get('enrollment_date'), course_name=user_data.get('course_name'),
-                    batch_id=user_data.get('batch_id'), batch_name=user_data.get('batch_name')
+                    student_id=user_data.get('student_id'), 
+                    course_id=user_data.get('course_id'),
+                    enrollment_date=user_data.get('enrollment_date'), 
+                    course_name=user_data.get('course_name'),
+                    batch_id=user_data.get('batch_id'), 
+                    batch_name=user_data.get('batch_name')
                 )
         return None
     
@@ -129,14 +143,14 @@ class User(UserMixin):
     
     @staticmethod
     def create_user(email, password_hash, full_name, phone, role, created_by=None, 
-                   first_name=None, last_name=None, qualifications=None, profile_picture=None,gender=None):
+                   first_name=None, last_name=None, qualifications=None, profile_picture=None, gender=None):
         conn = current_app.get_db_connection()
         if conn:
             try:
                 cursor = conn.cursor()
                 cursor.execute(
-                    "INSERT INTO users (email, password_hash, full_name, phone, role, created_by, first_name, last_name, qualifications, profile_picture,gender) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s,%s)",
-                    (email, password_hash, full_name, phone, role, created_by, first_name, last_name, qualifications, profile_picture,gender)
+                    "INSERT INTO users (email, password_hash, full_name, phone, role, created_by, first_name, last_name, qualifications, profile_picture, gender) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                    (email, password_hash, full_name, phone, role, created_by, first_name, last_name, qualifications, profile_picture, gender)
                 )
                 user_id = cursor.lastrowid
                 conn.commit()
@@ -178,146 +192,95 @@ class User(UserMixin):
                     conn.close()
         return False
 
-    # --- NEW METHODS FOR LEAVE MANAGEMENT ---
-
     def get_leave_balance(self, batch_id, leave_type_id):
         """
-        Fetches the remaining leave days for a student for a specific leave type and batch.
-        Returns a tuple: (remaining_days, max_days).
-        remaining_days can be an integer or 'Unlimited'.
-        max_days can be an integer or float('inf').
+        Fetches remaining leave days.
         """
         conn = current_app.get_db_connection()
-        if not conn: 
-            return 0, 0 # Return 0s if DB connection fails
+        if not conn: return 0, 0
 
         try:
             cursor = conn.cursor(dictionary=True)
-            
-            # 1. Get leave type details (name, limit status, default limit)
             cursor.execute("SELECT type_name, has_limit, default_limit_days FROM leave_types WHERE leave_type_id = %s", (leave_type_id,))
             leave_type = cursor.fetchone()
             
-            if not leave_type:
-                return 0, 0 # Invalid leave type
+            if not leave_type: return 0, 0
 
-            type_name = leave_type['type_name']
             has_limit = leave_type['has_limit']
-            default_limit = leave_type['default_limit_days']
+            # With new DB, limits are primarily on the batch table or global defaults
+            # Simplified logic for new schema:
+            max_days = leave_type['default_limit_days'] if has_limit and leave_type['default_limit_days'] is not None else float('inf')
+            
+            # Use batch specific override if available (need to query batches table if implemented)
+            # For now using default
 
-            max_days = 0
-            if has_limit:
-                # Check for student-specific allowance first in student_leave_allowances
-                cursor.execute("""
-                    SELECT allowed_days FROM student_leave_allowances
-                    WHERE student_id = %s AND batch_id = %s AND leave_type_id = %s
-                """, (self.user_id, batch_id, leave_type_id)) # Use self.user_id as student_id
-                
-                allowance = cursor.fetchone()
-                if allowance:
-                    max_days = allowance['allowed_days'] # Use student-specific limit if found
-                else:
-                    # If no specific allowance, use the default limit or 0 if default is NULL
-                    max_days = default_limit if default_limit is not None else 0
-            else:
-                max_days = float('inf') # Represent unlimited leave days.
-
-            # 2. Calculate used days for this leave type and batch
             cursor.execute("""
                 SELECT SUM(days_requested) as used_days
                 FROM leave_applications
                 WHERE student_id = %s AND batch_id = %s AND leave_type_id = %s AND status = 'approved'
-            """, (self.user_id, batch_id, leave_type_id)) # Use self.user_id as student_id
+            """, (self.student_id, batch_id, leave_type_id)) # Note: using self.student_id
             
             used_data = cursor.fetchone()
             used_days = used_data['used_days'] if used_data and used_data['used_days'] else 0
 
-            # 3. Calculate remaining days
             remaining_days = 'Unlimited'
             if has_limit and max_days != float('inf'):
-                remaining_days = max(0, max_days - used_days)
-            elif has_limit and max_days == 0: # Handle case where limit is explicitly 0
-                remaining_days = 0
+                remaining_days = max(0, int(max_days) - int(used_days))
             
             return remaining_days, max_days
 
         except mysql.connector.Error as err:
-            print(f"Error getting leave balance for student {self.user_id}, batch {batch_id}, type {leave_type_id}: {err}")
-            return 0, 0 # Error case
+            print(f"Error getting leave balance: {err}")
+            return 0, 0
         finally:
             if conn and conn.is_connected():
                 cursor.close()
                 conn.close()
-        
-        return 0, 0 # Fallback if connection failed or other issues
-
-    
 
     def get_all_leave_balances_for_batch(self, batch_id):
-        """
-        Fetches all leave balances (per type) for the student in a specific batch.
-        """
         balances = {}
         conn = current_app.get_db_connection()
-        if not (conn and self.student_id and batch_id): 
-            return balances
+        if not (conn and self.student_id and batch_id): return balances
 
         try:
             cursor = conn.cursor(dictionary=True)
-            
-            # Fetch all defined leave types
             cursor.execute("SELECT leave_type_id, type_name, has_limit, default_limit_days FROM leave_types ORDER BY type_name")
             leave_types = cursor.fetchall()
             
-            # Fetch batch-specific leave limits
-            cursor.execute("""
-                SELECT personal_leave_limit, medical_leave_limit, academic_leave_limit, special_leave_limit 
-                FROM batches WHERE batch_id = %s
-            """, (batch_id,))
-            batch_limits = cursor.fetchone()
+            # Fetch batch specific limits if applicable (columns like personal_leave_limit in batches table)
+            cursor.execute("SELECT * FROM batches WHERE batch_id = %s", (batch_id,))
+            batch_data = cursor.fetchone()
 
-            for leave_type in leave_types:
-                type_name = leave_type['type_name']
-                type_name_lower = type_name.lower()
-                has_limit = leave_type['has_limit']
+            for lt in leave_types:
+                type_name = lt['type_name']
+                max_days = lt['default_limit_days'] if lt['has_limit'] else float('inf')
                 
-                max_days = float('inf')
-                if has_limit:
-                    # Use the batch-specific limit if it's set, otherwise use the leave_type default
-                    batch_specific_limit = batch_limits.get(f'{type_name_lower}_leave_limit')
-                    if batch_specific_limit is not None:
-                        max_days = batch_specific_limit
-                    else:
-                        max_days = leave_type['default_limit_days'] or 0
+                # Check for batch override (naming convention assumption: type_name_lower + '_leave_limit')
+                limit_col = f"{type_name.lower()}_leave_limit"
+                if batch_data and limit_col in batch_data and batch_data[limit_col] is not None:
+                    max_days = batch_data[limit_col]
 
-                # CORRECTED: Use self.student_id to query the leave_applications table
                 cursor.execute("""
                     SELECT COALESCE(SUM(days_requested), 0) as used_days
                     FROM leave_applications
                     WHERE student_id = %s AND batch_id = %s AND leave_type_id = %s AND status = 'approved'
-                """, (self.student_id, batch_id, leave_type['leave_type_id']))
+                """, (self.student_id, batch_id, lt['leave_type_id']))
                 
                 used_days = cursor.fetchone()['used_days']
-
+                
                 remaining = 'Unlimited'
-                if has_limit:
+                if max_days != float('inf'):
                     remaining = max(0, int(max_days) - int(used_days))
                 
-                balances[type_name] = {'remaining': remaining, 'total': max_days if has_limit else 'Unlimited'}
+                balances[type_name] = {'remaining': remaining, 'total': max_days if max_days != float('inf') else 'Unlimited'}
             
         except mysql.connector.Error as err:
-            print(f"Error getting all leave balances for student {self.student_id}: {err}")
+            print(f"Error getting all leave balances: {err}")
         finally:
-            if conn and conn.is_connected():
-                cursor.close()
-                conn.close()
+            if conn.is_connected(): cursor.close(); conn.close()
         
         return balances
 
-
-
-# --- Flask-Login User Loader Callback ---
 @login_manager.user_loader
 def load_user(user_id):
-    # Loads user from DB using user_id. This is called by Flask-Login to get the current_user object.
     return User.get(user_id)

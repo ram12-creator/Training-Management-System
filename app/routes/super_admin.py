@@ -12,6 +12,7 @@ import io
 import os
 from werkzeug.utils import secure_filename
 import time
+import json
 
 
 
@@ -866,6 +867,91 @@ def assign_course():
     return jsonify({'success': False, 'message': 'Database connection error'})
 
 
+@super_admin_bp.route('/approvals')
+def approvals():
+    conn = current_app.get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    # Fetch pending requests with requester name
+    cursor.execute("""
+        SELECT ar.*, u.full_name as requester_name
+        FROM approval_requests ar
+        JOIN users u ON ar.requester_id = u.user_id
+        WHERE ar.status = 'PENDING'
+        ORDER BY ar.created_at DESC
+    """)
+    requests = cursor.fetchall()
+    
+    # Fetch target names (Student Names) manually to avoid complex dynamic joins
+    for req in requests:
+        if req['target_id']:
+            cursor.execute("""
+                SELECT u.full_name FROM students s 
+                JOIN users u ON s.user_id = u.user_id 
+                WHERE s.student_id = %s
+            """, (req['target_id'],))
+            res = cursor.fetchone()
+            req['student_name'] = res['full_name'] if res else "Unknown"
+
+    conn.close()
+    return render_template('super_admin/approvals.html', requests=requests)
+
+@super_admin_bp.route('/process_approval/<int:request_id>', methods=['POST'])
+def process_approval(request_id):
+    data = request.json
+    decision = data.get('decision') # 'APPROVED' or 'REJECTED'
+    
+    conn = current_app.get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        cursor.execute("SELECT * FROM approval_requests WHERE request_id = %s", (request_id,))
+        req = cursor.fetchone()
+        
+        if decision == 'APPROVED':
+            # --- 1. HANDLE DROPOUT ---
+            if req['action_type'] == 'DROPOUT':
+                # Soft Delete Logic:
+                # 1. Update Student Status to DROPOUT
+                cursor.execute("UPDATE students SET enrollment_status = 'DROPOUT' WHERE student_id = %s", (req['target_id'],))
+                # 2. Deactivate User Login (So they can't login, but data remains)
+                cursor.execute("""
+                    UPDATE users SET is_active = FALSE 
+                    WHERE user_id = (SELECT user_id FROM students WHERE student_id = %s)
+                """, (req['target_id'],))
+                # 3. Mark inactive in batch
+                cursor.execute("UPDATE batch_students SET is_active = FALSE WHERE student_id = %s", (req['target_id'],))
+
+            # --- 2. HANDLE LATE ENROLLMENT ---
+            elif req['action_type'] == 'LATE_ENROLLMENT':
+                payload = json.loads(req['new_data_payload'])
+                batch_id = payload['batch_id']
+                course_id = payload['course_id']
+                
+                # Generate ID
+                new_id = f"MIT-{datetime.now().year}-{req['target_id']}"
+                
+                cursor.execute("""
+                    UPDATE students SET batch_id=%s, course_id=%s, enrollment_status='ENROLLED', enrollment_id=%s 
+                    WHERE student_id=%s
+                """, (batch_id, course_id, new_id, req['target_id']))
+                
+                cursor.execute("INSERT INTO batch_students (batch_id, student_id, is_active) VALUES (%s, %s, TRUE)", (batch_id, req['target_id']))
+
+        # Update Request Status
+        cursor.execute("UPDATE approval_requests SET status=%s, approver_id=%s WHERE request_id=%s", 
+                       (decision, current_user.user_id, request_id))
+        
+        conn.commit()
+        return jsonify({'success': True, 'message': f'Request {decision}'})
+
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'message': str(e)})
+    finally:
+        conn.close()
+
+
 
 
 
@@ -987,3 +1073,6 @@ def delete_user():
         if conn:
             conn.close()
         return jsonify({'success': False, 'message': f'Error deleting user: {str(err)}'})
+    
+
+    

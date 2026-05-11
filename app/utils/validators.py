@@ -43,94 +43,92 @@ def validate_course_dates(start_date_str, end_date_str, duration_weeks):
 def validate_csv_headers(headers, expected_headers):
     return set(headers) == set(expected_headers)
 
-# --- MODIFIED LEAVE VALIDATION ---
 def validate_leave_dates(start_date_str, end_date_str, leave_type_id, student_id, batch_id):
     """
-    Validates leave application dates and checks against leave limits based on type and batch.
-    
-    Args:
-        start_date_str (str): The requested start date ('YYYY-MM-DD').
-        end_date_str (str): The requested end date ('YYYY-MM-DD').
-        leave_type_id (int): The ID of the leave type being applied for.
-        student_id (int): The ID of the student applying for leave.
-        batch_id (int): The ID of the batch the leave is associated with.
-        
-    Returns:
-        tuple: (bool, str) indicating validation success and a message.
+    Validates leave application with the new '2-Day Notice' rule for Personal Leave.
     """
     conn = current_app.get_db_connection()
     if not conn: return False, "Database connection error"
     
     try:
-        start = datetime.strptime(start_date_str, '%Y-%m-%d')
-        end = datetime.strptime(end_date_str, '%Y-%m-%d')
-        
-        # Basic date validation: end date must be after start date
-        if end < start:
-            return False, "End date must be after start date"
-        
-        # Check if dates are in the future
+        start = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        end = datetime.strptime(end_date_str, '%Y-%m-%d').date()
         today = datetime.now().date()
-        if start.date() < today:
-            return False, "Leave cannot be applied for past dates"
         
-        # Calculate number of requested leave days (excluding weekends)
-        leave_days = 0
-        current = start
-        while current <= end:
-            if current.weekday() < 5:  # Monday to Friday (0-4)
-                leave_days += 1
-            current += timedelta(days=1)
-        
-        # Fetch leave type details to check for limits
+        # 1. Basic Validation
+        if end < start:
+            return False, "End date must be after start date."
+        if start < today:
+            return False, "You cannot apply for leave in the past."
+
         cursor = conn.cursor(dictionary=True)
+        
+        # 2. Get Leave Type Name to check for 'Personal'
         cursor.execute("SELECT type_name, has_limit, default_limit_days FROM leave_types WHERE leave_type_id = %s", (leave_type_id,))
         leave_type = cursor.fetchone()
         
         if not leave_type:
-            return False, "Invalid leave type selected"
+            return False, "Invalid leave type."
 
-        max_days = 0
+        # ============================================================
+        # NEW RULE: 2-Day Prior Notice for Personal Leave
+        # ============================================================
+        if leave_type['type_name'] == 'Personal':
+            # Calculate difference in days
+            days_notice = (start - today).days
+            if days_notice < 2:
+                return False, f"Personal Leave requires at least 2 days prior notice. Earliest you can apply for is {(today + timedelta(days=2)).strftime('%d-%b-%Y')}."
+
+        # 3. Existing Logic: Check Leave Balance
+        max_days = float('inf')
         if leave_type['has_limit']:
-            # Check for student-specific allowance first
+            # Check student allowance overrides
             cursor.execute("""
                 SELECT allowed_days FROM student_leave_allowances
                 WHERE student_id = %s AND batch_id = %s AND leave_type_id = %s
             """, (student_id, batch_id, leave_type_id))
             allowance = cursor.fetchone()
             
+            # Use batch/global limit if no override
             if allowance:
                 max_days = allowance['allowed_days']
             else:
-                # If no specific allowance, use the default limit (or 0 if default is NULL)
-                max_days = leave_type['default_limit_days'] if leave_type['default_limit_days'] is not None else 0
-        else:
-            max_days = float('inf') # Represent unlimited leave days.
+                # Fallback to batch limit if configured, else default
+                cursor.execute(f"SELECT {leave_type['type_name'].lower()}_leave_limit FROM batches WHERE batch_id = %s", (batch_id,))
+                batch_limit = cursor.fetchone()
+                # Use batch specific limit column if it exists, else default
+                if batch_limit and list(batch_limit.values())[0] is not None:
+                     max_days = list(batch_limit.values())[0]
+                else:
+                     max_days = leave_type['default_limit_days'] or 0
 
-        # Calculate used days for this leave type and batch
+        # Calculate requested days (excluding weekends)
+        leave_days = 0
+        current = start
+        while current <= end:
+            if current.weekday() < 5:  # Monday to Friday
+                leave_days += 1
+            current += timedelta(days=1)
+            
+        if leave_days == 0:
+             return False, "You selected only weekends. No leave needed."
+
+        # Check Usage
         cursor.execute("""
             SELECT SUM(days_requested) as used_days
             FROM leave_applications
             WHERE student_id = %s AND batch_id = %s AND leave_type_id = %s AND status = 'approved'
         """, (student_id, batch_id, leave_type_id))
-        used_data = cursor.fetchone()
-        used_days = used_data['used_days'] if used_data and used_data['used_days'] else 0
+        used = cursor.fetchone()['used_days'] or 0
 
-        # Check if the requested days exceed the allowed limit
-        if max_days != float('inf') and (used_days + leave_days > max_days):
-            remaining = max(0, max_days - used_days) # Ensure remaining is not negative
-            return False, f"Exceeds maximum allowed leaves ({max_days} days). You have {remaining} leaves remaining."
+        if (used + leave_days) > max_days:
+            return False, f"Insufficient balance. You have {int(max_days - used)} days remaining for {leave_type['type_name']}."
         
-        # If all validations pass
-        return True, f"{leave_days} days requested for {leave_type['type_name']} leave"
+        return True, "Valid"
         
-    except (ValueError, TypeError) as e:
-        print(f"Date validation error: {e}")
-        return False, "Invalid date format or error calculating leave days"
+    except ValueError:
+        return False, "Invalid date format."
     finally:
-        # Ensure connection is closed
-        if conn and conn.is_connected():
+        if conn.is_connected():
             cursor.close()
             conn.close()
-    
-    return False, "Unknown validation error" # Fallback

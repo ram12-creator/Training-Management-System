@@ -4,7 +4,7 @@ bcrypt==4.0.1
 beautifulsoup4==4.13.5
 billiard==4.2.1
 blinker==1.9.0
-celery==5.5.3
+# celery==5.5.3
 click==8.1.8
 click-didyoumean==0.3.1
 click-plugins==1.1.1.2
@@ -26,7 +26,7 @@ itsdangerous==2.2.0
 Jinja2==3.1.6
 kiwisolver==1.4.7
 kombu==5.5.4
-librabbitmq==2.0.0
+xhtml2pdf
 MarkupSafe==3.0.2
 matplotlib==3.9.4
 more-itertools==10.8.0
@@ -43,7 +43,7 @@ python-dateutil==2.9.0.post0
 python-dotenv==1.0.0
 python-http-client==3.3.7
 pytz==2025.2
-redis==6.4.0
+# redis==6.4.0
 seaborn==0.13.2
 sendgrid==6.10.0
 six==1.17.0
@@ -57,3 +57,4 @@ wcwidth==0.2.13
 Werkzeug==2.3.7
 WTForms==3.2.1
 zipp==3.23.0
+gunicorn
